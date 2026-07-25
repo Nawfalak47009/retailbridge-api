@@ -23,9 +23,7 @@ export class OrdersController {
     @Body()
     dto: CreateOrderDto,
   ) {
-    return this.ordersService.create(
-      dto,
-    );
+    return this.ordersService.create(dto);
   }
 
   @Get()
@@ -33,14 +31,23 @@ export class OrdersController {
     return this.ordersService.findAll();
   }
 
+  // ✅ GET /orders/agency/:agencyId
+  @Get("agency/:agencyId")
+  findByAgency(
+    @Param("agencyId")
+    agencyId: string,
+  ) {
+    return this.ordersService.findByAgency(
+      agencyId,
+    );
+  }
+
   @Get(":id")
   findOne(
     @Param("id")
     id: string,
   ) {
-    return this.ordersService.findOne(
-      id,
-    );
+    return this.ordersService.findOne(id);
   }
 
   @Patch(":id")
