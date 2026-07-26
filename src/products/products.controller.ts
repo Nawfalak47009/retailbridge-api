@@ -19,6 +19,17 @@ export class ProductsController {
   create(
     @Body() dto: CreateProductDto,
   ) {
+    console.log("========== PRODUCT DTO ==========");
+    console.log(dto);
+    console.log("Agency ID:", dto.agencyId);
+    console.log("Name:", dto.name);
+    console.log("Image:", dto.image);
+    console.log("Image Type:", typeof dto.image);
+    console.log("Unit:", dto.unit);
+    console.log("Quantity Per Unit:", dto.quantityPerUnit);
+    console.log("Price:", dto.price);
+    console.log("Stock:", dto.stock);
+
     return this.productsService.create(dto);
   }
 

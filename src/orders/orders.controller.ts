@@ -31,7 +31,6 @@ export class OrdersController {
     return this.ordersService.findAll();
   }
 
-  // ✅ GET /orders/agency/:agencyId
   @Get("agency/:agencyId")
   findByAgency(
     @Param("agencyId")
