@@ -13,5 +13,9 @@ import { S3Service } from "./s3.service";
     DocumentsService,
     S3Service,
   ],
+
+  exports: [
+    S3Service,   // <-- Add this
+  ],
 })
 export class DocumentsModule {}
