@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
 } from "@nestjs/common";
 
@@ -47,4 +49,14 @@ export class ProductsController {
       agencyId,
     );
   }
+
+  @Delete(":id")
+remove(
+  @Param("id")
+  id: string,
+) {
+  return this.productsService.remove(id);
 }
+
+}
+

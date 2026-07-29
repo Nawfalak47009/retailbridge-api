@@ -6,6 +6,7 @@ import { products } from "../db/schema";
 import { S3Service } from "../documents/s3.service";
 
 import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
 
 @Injectable()
 export class ProductsService {
@@ -62,4 +63,33 @@ async findByAgency(agencyId: string) {
       };
     }),
   );
-}}
+}
+
+async update(
+  id: string,
+  dto: UpdateProductDto,
+) {
+  const [product] = await db
+    .update(products)
+    .set(dto)
+    .where(eq(products.id, id))
+    .returning();
+
+  return {
+    success: true,
+    message: "Product updated successfully.",
+    product,
+  };
+}
+
+async remove(id: string) {
+  await db
+    .delete(products)
+    .where(eq(products.id, id));
+
+  return {
+    success: true,
+    message: "Product deleted successfully.",
+  };
+}
+}
