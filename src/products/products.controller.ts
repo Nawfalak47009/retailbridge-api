@@ -10,6 +10,7 @@ import {
 
 import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
 
 @Controller("products")
 export class ProductsController {
@@ -21,17 +22,6 @@ export class ProductsController {
   create(
     @Body() dto: CreateProductDto,
   ) {
-    console.log("========== PRODUCT DTO ==========");
-    console.log(dto);
-    console.log("Agency ID:", dto.agencyId);
-    console.log("Name:", dto.name);
-    console.log("Image:", dto.image);
-    console.log("Image Type:", typeof dto.image);
-    console.log("Unit:", dto.unit);
-    console.log("Quantity Per Unit:", dto.quantityPerUnit);
-    console.log("Price:", dto.price);
-    console.log("Stock:", dto.stock);
-
     return this.productsService.create(dto);
   }
 
@@ -50,13 +40,32 @@ export class ProductsController {
     );
   }
 
+  @Get(":id")
+  findOne(
+    @Param("id")
+    id: string,
+  ) {
+    return this.productsService.findOne(id);
+  }
+
+  @Patch(":id")
+  update(
+    @Param("id")
+    id: string,
+    @Body()
+    dto: UpdateProductDto,
+  ) {
+    return this.productsService.update(
+      id,
+      dto,
+    );
+  }
+
   @Delete(":id")
-remove(
-  @Param("id")
-  id: string,
-) {
-  return this.productsService.remove(id);
+  remove(
+    @Param("id")
+    id: string,
+  ) {
+    return this.productsService.remove(id);
+  }
 }
-
-}
-

@@ -82,6 +82,23 @@ async update(
   };
 }
 
+async findOne(id: string) {
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, id),
+  });
+
+  if (!product) {
+    return null;
+  }
+
+  const key = product.image.split("/").pop()!;
+
+  return {
+    ...product,
+    image: await this.s3Service.getSignedImageUrl(key),
+  };
+}
+
 async remove(id: string) {
   await db
     .delete(products)
