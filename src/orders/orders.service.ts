@@ -57,6 +57,22 @@ export class OrdersService {
     });
   }
 
+
+  // Get Orders By Shop
+async findByShop(
+  shopId: string,
+) {
+  return db.query.orders.findMany({
+    where: eq(
+      orders.shopId,
+      shopId,
+    ),
+    orderBy: (orders, { desc }) => [
+      desc(orders.createdAt),
+    ],
+  });
+}
+
   // Update Status
   async updateStatus(
     id: string,
@@ -81,6 +97,8 @@ export class OrdersService {
         ),
       );
 
+      
+
     return {
       success: true,
       message:
@@ -88,3 +106,4 @@ export class OrdersService {
     };
   }
 }
+

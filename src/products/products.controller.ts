@@ -61,6 +61,7 @@ export class ProductsController {
     );
   }
 
+
   @Delete(":id")
   remove(
     @Param("id")

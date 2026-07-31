@@ -99,6 +99,8 @@ async findOne(id: string) {
   };
 }
 
+
+
 async remove(id: string) {
   await db
     .delete(products)

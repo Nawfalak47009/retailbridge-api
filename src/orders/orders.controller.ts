@@ -49,6 +49,16 @@ export class OrdersController {
     return this.ordersService.findOne(id);
   }
 
+  @Get("shop/:shopId")
+findByShop(
+  @Param("shopId")
+  shopId: string,
+) {
+  return this.ordersService.findByShop(
+    shopId,
+  );
+}
+
   @Patch(":id")
   update(
     @Param("id")
@@ -63,3 +73,4 @@ export class OrdersController {
     );
   }
 }
+
