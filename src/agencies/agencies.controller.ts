@@ -1,4 +1,8 @@
-import { Controller, Get } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+} from "@nestjs/common";
 
 import { AgenciesService } from "./agencies.service";
 
@@ -11,5 +15,13 @@ export class AgenciesController {
   @Get()
   findAll() {
     return this.agenciesService.findAll();
+  }
+
+  @Get(":id")
+  findOne(
+    @Param("id")
+    id: string,
+  ) {
+    return this.agenciesService.findOne(id);
   }
 }
