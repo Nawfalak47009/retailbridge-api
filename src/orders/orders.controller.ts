@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 
 import { OrdersService } from "./orders.service";
@@ -12,55 +13,110 @@ import { OrdersService } from "./orders.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
+import { CurrentUser } from "../auth/current-user.decorator";
+import type { JwtUser } from "../auth/interfaces/jwt-user.interface";
+
 @Controller("orders")
 export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
   ) {}
 
+  // ===========================
+  // SHOP - CREATE ORDER
+  // ===========================
+
   @Post()
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
   create(
+    @CurrentUser() user: JwtUser,
     @Body()
     dto: CreateOrderDto,
   ) {
-    return this.ordersService.create(dto);
+    return this.ordersService.create(
+      user.id,
+      dto,
+    );
   }
+
+  // ===========================
+  // ADMIN
+  // ===========================
 
   @Get()
   findAll() {
     return this.ordersService.findAll();
   }
 
-  @Get("agency/:agencyId")
+  // ===========================
+  // AGENCY ORDERS
+  // ===========================
+
+  @Get("agency")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
   findByAgency(
-    @Param("agencyId")
-    agencyId: string,
+    @CurrentUser() user: JwtUser,
   ) {
     return this.ordersService.findByAgency(
-      agencyId,
+      user.id,
     );
   }
+
+  // ===========================
+  // SHOP ORDERS
+  // ===========================
+
+  @Get("shop")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  findByShop(
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.ordersService.findByShop(
+      user.id,
+    );
+  }
+
+  // ===========================
+  // SINGLE ORDER
+  // ===========================
 
   @Get(":id")
   findOne(
     @Param("id")
     id: string,
   ) {
-    return this.ordersService.findOne(id);
+    return this.ordersService.findOne(
+      id,
+    );
   }
 
-  @Get("shop/:shopId")
-findByShop(
-  @Param("shopId")
-  shopId: string,
-) {
-  return this.ordersService.findByShop(
-    shopId,
-  );
-}
+  // ===========================
+  // UPDATE STATUS
+  // ===========================
 
   @Patch(":id")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
   update(
+    @CurrentUser() user: JwtUser,
     @Param("id")
     id: string,
 
@@ -68,9 +124,9 @@ findByShop(
     dto: UpdateOrderDto,
   ) {
     return this.ordersService.updateStatus(
+      user.id,
       id,
       dto,
     );
   }
 }
-

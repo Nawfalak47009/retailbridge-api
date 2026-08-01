@@ -1,20 +1,67 @@
-import { Injectable } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { eq } from "drizzle-orm";
 
 import { db } from "../db";
-import { orders } from "../db/schema";
+import {
+  agencies,
+  orders,
+  shops,
+} from "../db/schema";
 
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 
 @Injectable()
 export class OrdersService {
-  // Create Order
-  async create(dto: CreateOrderDto) {
-    const [order] = await db
-      .insert(orders)
-      .values(dto)
-      .returning();
+  // ===========================
+  // SHOP - CREATE ORDER
+  // ===========================
+
+  async create(
+    userId: string,
+    dto: CreateOrderDto,
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
+
+    if (!shop) {
+      throw new NotFoundException(
+        "Shop not found.",
+      );
+    }
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          dto.agencyId,
+        ),
+      });
+
+    if (!agency) {
+      throw new NotFoundException(
+        "Agency not found.",
+      );
+    }
+
+    const [order] =
+      await db
+        .insert(orders)
+        .values({
+          shopId: shop.id,
+          agencyId: agency.id,
+          remarks: dto.remarks,
+        })
+        .returning();
 
     return {
       success: true,
@@ -23,7 +70,10 @@ export class OrdersService {
     };
   }
 
-  // Get All Orders
+  // ===========================
+  // ADMIN - ALL ORDERS
+  // ===========================
+
   async findAll() {
     return db.query.orders.findMany({
       orderBy: (orders, { desc }) => [
@@ -32,14 +82,31 @@ export class OrdersService {
     });
   }
 
-  // Get Orders By Agency
+  // ===========================
+  // AGENCY - MY ORDERS
+  // ===========================
+
   async findByAgency(
-    agencyId: string,
+    userId: string,
   ) {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.userId,
+          userId,
+        ),
+      });
+
+    if (!agency) {
+      throw new NotFoundException(
+        "Agency not found.",
+      );
+    }
+
     return db.query.orders.findMany({
       where: eq(
         orders.agencyId,
-        agencyId,
+        agency.id,
       ),
       orderBy: (orders, { desc }) => [
         desc(orders.createdAt),
@@ -47,8 +114,45 @@ export class OrdersService {
     });
   }
 
-  // Get Single Order
-  async findOne(id: string) {
+  // ===========================
+  // SHOP - MY ORDERS
+  // ===========================
+
+  async findByShop(
+    userId: string,
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
+
+    if (!shop) {
+      throw new NotFoundException(
+        "Shop not found.",
+      );
+    }
+
+    return db.query.orders.findMany({
+      where: eq(
+        orders.shopId,
+        shop.id,
+      ),
+      orderBy: (orders, { desc }) => [
+        desc(orders.createdAt),
+      ],
+    });
+  }
+
+  // ===========================
+  // GET SINGLE ORDER
+  // ===========================
+
+  async findOne(
+    id: string,
+  ) {
     return db.query.orders.findFirst({
       where: eq(
         orders.id,
@@ -57,27 +161,52 @@ export class OrdersService {
     });
   }
 
+  // ===========================
+  // AGENCY - UPDATE STATUS
+  // ===========================
 
-  // Get Orders By Shop
-async findByShop(
-  shopId: string,
-) {
-  return db.query.orders.findMany({
-    where: eq(
-      orders.shopId,
-      shopId,
-    ),
-    orderBy: (orders, { desc }) => [
-      desc(orders.createdAt),
-    ],
-  });
-}
-
-  // Update Status
   async updateStatus(
+    userId: string,
     id: string,
     dto: UpdateOrderDto,
   ) {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.userId,
+          userId,
+        ),
+      });
+
+    if (!agency) {
+      throw new NotFoundException(
+        "Agency not found.",
+      );
+    }
+
+    const order =
+      await db.query.orders.findFirst({
+        where: eq(
+          orders.id,
+          id,
+        ),
+      });
+
+    if (!order) {
+      throw new NotFoundException(
+        "Order not found.",
+      );
+    }
+
+    if (
+      order.agencyId !==
+      agency.id
+    ) {
+      throw new UnauthorizedException(
+        "You cannot update this order.",
+      );
+    }
+
     await db
       .update(orders)
       .set({
@@ -97,8 +226,6 @@ async findByShop(
         ),
       );
 
-      
-
     return {
       success: true,
       message:
@@ -106,4 +233,3 @@ async findByShop(
     };
   }
 }
-

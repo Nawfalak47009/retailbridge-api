@@ -145,44 +145,32 @@ export class AuthService {
     };
   }
 
-  // =========================
-  // LOGIN
-  // =========================
+ // =========================
+// LOGIN
+// =========================
 
-  async login(
-  dto: LoginDto,
-) {
+async login(dto: LoginDto) {
   const user =
     await db.query.users.findFirst({
-      where: eq(
-        users.email,
-        dto.email,
-      ),
+      where: eq(users.email, dto.email),
     });
 
-  // User not found
   if (!user) {
     throw new UnauthorizedException(
       "Invalid credentials.",
     );
   }
 
-  // User not approved
-  if (
-    user.status !==
-    "APPROVED"
-  ) {
+  if (user.status !== "APPROVED") {
     throw new UnauthorizedException(
       "Your account is pending approval.",
     );
   }
 
-  // Verify password
-  const valid =
-    await bcrypt.compare(
-      dto.password,
-      user.password,
-    );
+  const valid = await bcrypt.compare(
+    dto.password,
+    user.password,
+  );
 
   if (!valid) {
     throw new UnauthorizedException(
@@ -190,7 +178,34 @@ export class AuthService {
     );
   }
 
-  // Generate JWT
+  // Find Agency or Shop ID
+  let agencyId: string | null = null;
+  let shopId: string | null = null;
+
+  if (user.role === "AGENCY") {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.userId,
+          user.id,
+        ),
+      });
+
+    agencyId = agency?.id ?? null;
+  }
+
+  if (user.role === "SHOP") {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          user.id,
+        ),
+      });
+
+    shopId = shop?.id ?? null;
+  }
+
   const token =
     await this.jwtService.signAsync({
       id: user.id,
@@ -208,6 +223,9 @@ export class AuthService {
       email: user.email,
       role: user.role,
       status: user.status,
+
+      agencyId,
+      shopId,
     },
   };
 }
