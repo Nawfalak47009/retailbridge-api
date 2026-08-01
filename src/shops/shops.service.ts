@@ -1,4 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { eq } from "drizzle-orm";
 
 import { db } from "../db";
@@ -8,9 +11,17 @@ import {
   orders,
 } from "../db/schema";
 
+import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
+
 @Injectable()
 export class ShopsService {
-  async submit(dto: any) {
+  // =====================================
+  // Submit Documents
+  // =====================================
+
+  async submit(
+    dto: SubmitShopDocumentsDto,
+  ) {
     console.log(dto);
 
     return {
@@ -19,6 +30,10 @@ export class ShopsService {
         "Documents submitted successfully.",
     };
   }
+
+  // =====================================
+  // Shop Status
+  // =====================================
 
   async status(id: string) {
     return {
@@ -31,20 +46,27 @@ export class ShopsService {
     };
   }
 
-  async dashboard(userId: string) {
-    // Find shop using logged-in user id
-    const shop = await db.query.shops.findFirst({
-      where: eq(shops.userId, userId),
-    });
+  // =====================================
+  // Dashboard (JWT)
+  // =====================================
+
+  async dashboard(
+    userId: string,
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
 
     if (!shop) {
-      return {
-        success: false,
-        message: "Shop not found",
-      };
+      throw new NotFoundException(
+        "Shop not found.",
+      );
     }
 
-    // Connected agencies
     const connectedAgencies =
       await db.query.agencyShops.findMany({
         where: eq(
@@ -53,7 +75,6 @@ export class ShopsService {
         ),
       });
 
-    // Orders
     const shopOrders =
       await db.query.orders.findMany({
         where: eq(
@@ -63,7 +84,11 @@ export class ShopsService {
         orderBy: (
           orders,
           { desc },
-        ) => [desc(orders.createdAt)],
+        ) => [
+          desc(
+            orders.createdAt,
+          ),
+        ],
       });
 
     return {
@@ -80,17 +105,24 @@ export class ShopsService {
 
         pendingOrders:
           shopOrders.filter(
-            (o) => o.status === "PENDING",
+            (order) =>
+              order.status ===
+              "PENDING",
           ).length,
 
         deliveredOrders:
           shopOrders.filter(
-            (o) => o.status === "DELIVERED",
+            (order) =>
+              order.status ===
+              "DELIVERED",
           ).length,
       },
 
       recentOrders:
-        shopOrders.slice(0, 5),
+        shopOrders.slice(
+          0,
+          5,
+        ),
     };
   }
 }

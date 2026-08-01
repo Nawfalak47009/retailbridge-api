@@ -1,6 +1,4 @@
 export class CreateAgencyProfileDto {
-  agencyId!: string;
-
   address?: string;
 
   gst?: string;

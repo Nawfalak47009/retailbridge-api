@@ -150,16 +150,75 @@ export class OrdersService {
   // GET SINGLE ORDER
   // ===========================
 
-  async findOne(
-    id: string,
-  ) {
-    return db.query.orders.findFirst({
+ async findOne(
+  userId: string,
+  role: string,
+  id: string,
+) {
+  const order =
+    await db.query.orders.findFirst({
       where: eq(
         orders.id,
         id,
       ),
     });
+
+  if (!order) {
+    throw new NotFoundException(
+      "Order not found.",
+    );
   }
+
+  if (role === "ADMIN") {
+    return order;
+  }
+
+  if (role === "AGENCY") {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.userId,
+          userId,
+        ),
+      });
+
+    if (
+      !agency ||
+      order.agencyId !== agency.id
+    ) {
+      throw new UnauthorizedException(
+        "Unauthorized.",
+      );
+    }
+
+    return order;
+  }
+
+  if (role === "SHOP") {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
+
+    if (
+      !shop ||
+      order.shopId !== shop.id
+    ) {
+      throw new UnauthorizedException(
+        "Unauthorized.",
+      );
+    }
+
+    return order;
+  }
+
+  throw new UnauthorizedException(
+    "Unauthorized.",
+  );
+}
 
   // ===========================
   // AGENCY - UPDATE STATUS

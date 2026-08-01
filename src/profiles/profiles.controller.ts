@@ -2,8 +2,9 @@ import {
   Body,
   Controller,
   Get,
-  Param,
   Post,
+  Patch,
+  UseGuards,
 } from "@nestjs/common";
 
 import { ProfilesService } from "./profiles.service";
@@ -11,53 +12,119 @@ import { ProfilesService } from "./profiles.service";
 import { CreateAgencyProfileDto } from "./dto/create-agency-profile.dto";
 import { CreateShopProfileDto } from "./dto/create-shop-profile.dto";
 
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
+import { CurrentUser } from "../auth/current-user.decorator";
+import type { JwtUser } from "../auth/interfaces/jwt-user.interface";
+
 @Controller("profiles")
 export class ProfilesController {
   constructor(
     private readonly profilesService: ProfilesService,
   ) {}
 
-  // Agency
+  // =====================================
+  // AGENCY PROFILE
+  // =====================================
 
   @Post("agency")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
   createAgencyProfile(
+    @CurrentUser() user: JwtUser,
     @Body()
     dto: CreateAgencyProfileDto,
   ) {
     return this.profilesService.createAgencyProfile(
+      user.id,
       dto,
     );
   }
 
-  @Get("agency/:id")
+  @Get("agency")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
   getAgencyProfile(
-    @Param("id")
-    id: string,
+    @CurrentUser() user: JwtUser,
   ) {
     return this.profilesService.getAgencyProfile(
-      id,
+      user.id,
     );
   }
 
-  // Shop
+  @Patch("agency")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
+  updateAgencyProfile(
+    @CurrentUser() user: JwtUser,
+    @Body()
+    dto: CreateAgencyProfileDto,
+  ) {
+    return this.profilesService.updateAgencyProfile(
+      user.id,
+      dto,
+    );
+  }
+
+  // =====================================
+  // SHOP PROFILE
+  // =====================================
 
   @Post("shop")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
   createShopProfile(
+    @CurrentUser() user: JwtUser,
     @Body()
     dto: CreateShopProfileDto,
   ) {
     return this.profilesService.createShopProfile(
+      user.id,
       dto,
     );
   }
 
-  @Get("shop/:id")
+  @Get("shop")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
   getShopProfile(
-    @Param("id")
-    id: string,
+    @CurrentUser() user: JwtUser,
   ) {
     return this.profilesService.getShopProfile(
-      id,
+      user.id,
+    );
+  }
+
+  @Patch("shop")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  updateShopProfile(
+    @CurrentUser() user: JwtUser,
+    @Body()
+    dto: CreateShopProfileDto,
+  ) {
+    return this.profilesService.updateShopProfile(
+      user.id,
+      dto,
     );
   }
 }

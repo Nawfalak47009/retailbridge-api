@@ -25,9 +25,9 @@ export class OrdersController {
     private readonly ordersService: OrdersService,
   ) {}
 
-  // ===========================
-  // SHOP - CREATE ORDER
-  // ===========================
+  // =====================================
+  // SHOP - PLACE ORDER
+  // =====================================
 
   @Post()
   @UseGuards(
@@ -46,18 +46,23 @@ export class OrdersController {
     );
   }
 
-  // ===========================
-  // ADMIN
-  // ===========================
+  // =====================================
+  // ADMIN - ALL ORDERS
+  // =====================================
 
   @Get()
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("ADMIN")
   findAll() {
     return this.ordersService.findAll();
   }
 
-  // ===========================
-  // AGENCY ORDERS
-  // ===========================
+  // =====================================
+  // AGENCY - MY ORDERS
+  // =====================================
 
   @Get("agency")
   @UseGuards(
@@ -73,9 +78,9 @@ export class OrdersController {
     );
   }
 
-  // ===========================
-  // SHOP ORDERS
-  // ===========================
+  // =====================================
+  // SHOP - MY ORDERS
+  // =====================================
 
   @Get("shop")
   @UseGuards(
@@ -91,23 +96,29 @@ export class OrdersController {
     );
   }
 
-  // ===========================
+  // =====================================
   // SINGLE ORDER
-  // ===========================
+  // =====================================
 
-  @Get(":id")
-  findOne(
-    @Param("id")
-    id: string,
-  ) {
-    return this.ordersService.findOne(
-      id,
-    );
-  }
+ @Get(":id")
+@UseGuards(
+  JwtAuthGuard,
+)
+findOne(
+  @CurrentUser() user: JwtUser,
+  @Param("id")
+  id: string,
+) {
+  return this.ordersService.findOne(
+    user.id,
+    user.role,
+    id,
+  );
+}
 
-  // ===========================
-  // UPDATE STATUS
-  // ===========================
+  // =====================================
+  // AGENCY - UPDATE DELIVERY STATUS
+  // =====================================
 
   @Patch(":id")
   @UseGuards(
@@ -119,7 +130,6 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Param("id")
     id: string,
-
     @Body()
     dto: UpdateOrderDto,
   ) {
