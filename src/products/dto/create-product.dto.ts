@@ -4,9 +4,14 @@ import {
 } from "class-validator";
 
 export class CreateProductDto {
+  @IsString()
+  agencyId!: string;
 
   @IsString()
   name!: string;
+
+  @IsString()
+  category!: string;
 
   @IsString()
   image!: string;

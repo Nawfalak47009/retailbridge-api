@@ -43,23 +43,23 @@ export class ProductsService {
       );
     }
 
-    const [product] =
-      await db
-        .insert(products)
-        .values({
-          agencyId: agency.id,
-          name: dto.name,
-          image: dto.image,
-          unit: dto.unit,
-          quantityPerUnit:
-            dto.quantityPerUnit,
-          price: dto.price,
-          stock: dto.stock,
-          isActive:
-            dto.isActive ?? "true",
-        })
-        .returning();
-
+   const [product] =
+  await db
+    .insert(products)
+    .values({
+      agencyId: agency.id,
+      name: dto.name,
+      category: dto.category,
+      image: dto.image,
+      unit: dto.unit,
+      quantityPerUnit:
+        dto.quantityPerUnit,
+      price: dto.price,
+      stock: dto.stock,
+      isActive:
+        dto.isActive ?? "true",
+    })
+    .returning();
     return {
       success: true,
       message:

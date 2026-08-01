@@ -4,6 +4,8 @@ import {
   varchar,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { integer } from "drizzle-orm/pg-core";
+
 
 export const users = pgTable(
   "users",
@@ -148,7 +150,7 @@ export const documents =
     },
   );
 
-  export const products = pgTable(
+export const products = pgTable(
   "products",
   {
     id: uuid()
@@ -163,6 +165,10 @@ export const documents =
       length: 255,
     }).notNull(),
 
+    category: varchar({
+      length: 100,
+    }).notNull(),
+
     image: varchar({
       length: 500,
     }).notNull(),
@@ -171,10 +177,9 @@ export const documents =
       length: 50,
     }).notNull(),
 
-    quantityPerUnit:
-      varchar({
-        length: 50,
-      }).notNull(),
+    quantityPerUnit: varchar({
+      length: 50,
+    }).notNull(),
 
     price: varchar({
       length: 50,
@@ -184,15 +189,13 @@ export const documents =
       length: 50,
     }).notNull(),
 
-    // NEW
     isActive: varchar({
       length: 10,
     }).default("true"),
 
-    createdAt:
-      timestamp()
-        .defaultNow()
-        .notNull(),
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
   },
 );
 
@@ -356,5 +359,46 @@ export const shopProfiles = pgTable(
   },
 );
 
+export const carts = pgTable(
+  "carts",
+  {
+    id: uuid()
+      .defaultRandom()
+      .primaryKey(),
 
-  
+    shopId: varchar({
+      length: 255,
+    }).notNull(),
+
+    agencyId: varchar({
+      length: 255,
+    }).notNull(),
+
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+export const cartItems = pgTable(
+  "cart_items",
+  {
+    id: uuid()
+      .defaultRandom()
+      .primaryKey(),
+
+    cartId: varchar({
+      length: 255,
+    }).notNull(),
+
+    productId: varchar({
+      length: 255,
+    }).notNull(),
+
+   quantity: integer().notNull(),
+
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
+  },
+);
