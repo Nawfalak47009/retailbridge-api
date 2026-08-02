@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
   Matches,
@@ -39,6 +40,11 @@ export class RegisterAgencyDto {
   @IsString()
   @IsNotEmpty()
   category!: string;
+
+  // NEW FIELD
+  @IsOptional()
+  @IsString()
+  description?: string;
 
   @MinLength(8)
   password!: string;

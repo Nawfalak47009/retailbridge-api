@@ -14,6 +14,7 @@ import { db } from "../db";
 import {
   users,
   agencies,
+  agencyProfiles,
   shops,
 } from "../db/schema";
 
@@ -27,61 +28,78 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  // =========================
-  // REGISTER AGENCY
-  // =========================
+ // =========================
+// REGISTER AGENCY
+// =========================
 
-  async registerAgency(
-    dto: RegisterAgencyDto,
-  ) {
-    const existingUser =
-      await db.query.users.findFirst({
-        where: eq(
-          users.email,
-          dto.email,
-        ),
-      });
+async registerAgency(
+  dto: RegisterAgencyDto,
+) {
+  const existingUser =
+    await db.query.users.findFirst({
+      where: eq(
+        users.email,
+        dto.email,
+      ),
+    });
 
-    if (existingUser) {
-      throw new BadRequestException(
-        "Email already exists.",
-      );
-    }
-
-    const hashed =
-      await bcrypt.hash(
-        dto.password,
-        12,
-      );
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        email: dto.email,
-        password: hashed,
-        role: "AGENCY",
-      })
-      .returning();
-
-    await db
-      .insert(agencies)
-      .values({
-        userId: user.id,
-        agencyName:
-          dto.agencyName,
-        ownerName:
-          dto.ownerName,
-        phone:
-          dto.phone,
-      });
-
-    return {
-      success: true,
-      message:
-        "Agency registered successfully. Waiting for admin approval.",
-      id: user.id,
-    };
+  if (existingUser) {
+    throw new BadRequestException(
+      "Email already exists.",
+    );
   }
+
+  const hashed =
+    await bcrypt.hash(
+      dto.password,
+      12,
+    );
+
+  // Create User
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: dto.email,
+      password: hashed,
+      role: "AGENCY",
+    })
+    .returning();
+
+  // Create Agency
+  const [agency] = await db
+    .insert(agencies)
+    .values({
+      userId: user.id,
+      agencyName:
+        dto.agencyName,
+      ownerName:
+        dto.ownerName,
+      phone:
+        dto.phone,
+    })
+    .returning();
+
+  // Create Agency Profile
+  await db
+    .insert(agencyProfiles)
+    .values({
+      agencyId: agency.id,
+      address:
+        dto.address,
+      gst:
+        dto.gst,
+      logo: "",
+      description:
+        dto.description ?? "",
+    });
+
+  return {
+    success: true,
+    message:
+      "Agency registered successfully. Waiting for admin approval.",
+    id: user.id,
+  };
+}
 
   // =========================
   // REGISTER SHOP
