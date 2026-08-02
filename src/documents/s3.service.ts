@@ -36,7 +36,7 @@ export class S3Service {
       this.s3,
       command,
       {
-        expiresIn: 3600, // 1 hour
+        expiresIn: 3600,
       },
     );
   }

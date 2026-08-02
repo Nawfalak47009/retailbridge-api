@@ -66,11 +66,11 @@ export class DocumentsService {
     );
 
   const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-
-  return {
-    success: true,
-    fileName: file.originalname,
-    url,
-  };
+return {
+  success: true,
+  fileName: file.originalname,
+  key,
+  url,
+};
 }
 }

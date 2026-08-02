@@ -104,8 +104,14 @@ export class ProductsService {
 
     return Promise.all(
       data.map(async (product) => {
-        const key =
-          product.image.split("/").pop()!;
+       let key = product.image;
+
+if (key.startsWith("http")) {
+  key = key
+    .split("?")[0]
+    .split("/")
+    .pop()!;
+}
 
         return {
           ...product,
@@ -137,8 +143,14 @@ export class ProductsService {
 
     return Promise.all(
       data.map(async (product) => {
-        const key =
-          product.image.split("/").pop()!;
+        let key = product.image;
+
+if (key.startsWith("http")) {
+  key = key
+    .split("?")[0]
+    .split("/")
+    .pop()!;
+}
 
         return {
           ...product,
@@ -179,8 +191,14 @@ export class ProductsService {
       );
     }
 
-    const key =
-      product.image.split("/").pop()!;
+   let key = product.image;
+
+if (key.startsWith("http")) {
+  key = key
+    .split("?")[0]
+    .split("/")
+    .pop()!;
+}
 
     return {
       ...product,
