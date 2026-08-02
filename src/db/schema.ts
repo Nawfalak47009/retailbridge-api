@@ -118,6 +118,18 @@ export const shops = pgTable(
     shopPhoto: varchar({
       length: 500,
     }),
+
+    rewardPoints: integer()
+  .default(0)
+  .notNull(),
+
+walletBalance: integer()
+  .default(0)
+  .notNull(),
+
+upiId: varchar({
+  length: 150,
+}),
   },
 );
 
@@ -206,6 +218,10 @@ export const orders = pgTable(
       .defaultRandom()
       .primaryKey(),
 
+    orderNumber: varchar({
+      length: 30,
+    }),
+
     shopId: varchar({
       length: 255,
     }).notNull(),
@@ -214,30 +230,61 @@ export const orders = pgTable(
       length: 255,
     }).notNull(),
 
+    totalAmount: integer()
+      .default(0)
+      .notNull(),
+
+    deliveryAddress: varchar({
+      length: 500,
+    }),
+
+    deliveryPincode: varchar({
+      length: 20,
+    }),
+
     status: varchar({
       length: 50,
     })
       .default("PENDING")
       .notNull(),
 
+    paymentStatus: varchar({
+      length: 30,
+    })
+      .default("UNPAID")
+      .notNull(),
+
+    rewardPoints: integer()
+      .default(0)
+      .notNull(),
+
     remarks: varchar({
       length: 500,
     }),
 
-    // NEW
-    deliveryDate: timestamp(),
+    trackingMessage: varchar({
+      length: 500,
+    }),
+
+    deliveryPerson: varchar({
+      length: 255,
+    }),
+
+    deliveryPhone: varchar({
+      length: 20,
+    }),
+
+    scheduledDate: timestamp(),
+
+    acceptedAt: timestamp(),
+
+    outForDeliveryAt: timestamp(),
 
     deliveredAt: timestamp(),
 
-    deliveryPerson:
-      varchar({
-        length: 255,
-      }),
-
-    createdAt:
-      timestamp()
-        .defaultNow()
-        .notNull(),
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
   },
 );
 
@@ -402,3 +449,36 @@ export const cartItems = pgTable(
       .notNull(),
   },
 );
+
+export const rewardTransactions = pgTable(
+  "reward_transactions",
+  {
+    id: uuid()
+      .defaultRandom()
+      .primaryKey(),
+
+    shopId: varchar({
+      length: 255,
+    }).notNull(),
+
+    orderId: varchar({
+      length: 255,
+    }),
+
+    points: integer().notNull(),
+
+    type: varchar({
+      length: 30,
+    }).notNull(),
+
+    description: varchar({
+      length: 255,
+    }),
+
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+

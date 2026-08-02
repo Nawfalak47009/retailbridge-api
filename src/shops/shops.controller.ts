@@ -47,6 +47,49 @@ export class ShopsController {
     return this.shopsService.status(id);
   }
 
+    // =====================================
+  // Shop Profile
+  // =====================================
+
+  @Get("profile")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  profile(
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.shopsService.profile(
+      user.id,
+    );
+  }
+
+  // =====================================
+  // Update Shop Address
+  // =====================================
+
+  @Patch("profile/address")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  updateAddress(
+    @CurrentUser() user: JwtUser,
+    @Body()
+    body: {
+      address: string;
+      pincode: string;
+      landmark?: string;
+    },
+  ) {
+    return this.shopsService.updateAddress(
+      user.id,
+      body,
+    );
+  }
+
   // =====================================
   // Shop Dashboard (JWT)
   // =====================================

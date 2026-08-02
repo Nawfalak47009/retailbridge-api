@@ -242,6 +242,8 @@ async updateQuantity(
     );
   }
 
+  
+
   // Find cart item
   const item =
     await db.query.cartItems.findFirst({
@@ -440,6 +442,19 @@ async checkout(
     );
   }
 
+  await db
+  .update(shops)
+  .set({
+    address: dto.deliveryAddress,
+    pincode: dto.deliveryPincode,
+  })
+  .where(
+    eq(
+      shops.id,
+      shop.id,
+    ),
+  );
+
   // Find carts
   const userCarts =
     await db.query.carts.findMany({
@@ -459,38 +474,58 @@ async checkout(
 
   for (const cart of userCarts) {
     // Create Order
-    const [order] =
-      await db
-        .insert(orders)
-        .values({
-          shopId: shop.id,
-          agencyId: cart.agencyId,
-          remarks:
-            dto.remarks ?? "",
-        })
-        .returning();
+    // Get Cart Items
+const items =
+  await db.query.cartItems.findMany({
+    where: eq(
+      cartItems.cartId,
+      cart.id,
+    ),
+  });
 
-    // Cart Items
-    const items =
-      await db.query.cartItems.findMany({
-        where: eq(
-          cartItems.cartId,
-          cart.id,
-        ),
-      });
+// Calculate Total
+let totalAmount = 0;
 
-    for (const item of items) {
-      await db
-        .insert(orderItems)
-        .values({
-          orderId: order.id,
-          productId:
-            item.productId,
-          cases: String(
-            item.quantity,
-          ),
-        });
-    }
+for (const item of items) {
+  const product =
+    await db.query.products.findFirst({
+      where: eq(
+        products.id,
+        item.productId,
+      ),
+    });
+
+  if (product) {
+    totalAmount +=
+      Number(product.price) *
+      Number(item.quantity);
+  }
+}
+
+// Create Order
+const [order] =
+  await db
+    .insert(orders)
+    .values({
+      shopId: shop.id,
+      agencyId: cart.agencyId,
+      remarks:
+        dto.remarks ?? "",
+    })
+    .returning();
+
+// Save Order Items
+for (const item of items) {
+  await db
+    .insert(orderItems)
+    .values({
+      orderId: order.id,
+      productId: item.productId,
+      cases: String(
+        item.quantity,
+      ),
+    });
+}
 
     // Delete cart items
     await db

@@ -47,6 +47,80 @@ export class ShopsService {
   }
 
   // =====================================
+// Shop Profile
+// =====================================
+
+async profile(userId: string) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  return {
+    success: true,
+    shop,
+  };
+}
+
+// =====================================
+// Update Address
+// =====================================
+
+async updateAddress(
+  userId: string,
+  body: {
+    address: string;
+    pincode: string;
+    landmark?: string;
+  },
+) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  const [updated] =
+    await db
+      .update(shops)
+      .set({
+        address: body.address,
+        pincode: body.pincode,
+      })
+      .where(
+        eq(
+          shops.id,
+          shop.id,
+        ),
+      )
+      .returning();
+
+  return {
+    success: true,
+    message:
+      "Address updated successfully.",
+    shop: updated,
+  };
+}
+
+  // =====================================
   // Dashboard (JWT)
   // =====================================
 
@@ -126,3 +200,4 @@ export class ShopsService {
     };
   }
 }
+

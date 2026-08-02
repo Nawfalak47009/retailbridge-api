@@ -224,71 +224,140 @@ export class OrdersService {
   // AGENCY - UPDATE STATUS
   // ===========================
 
-  async updateStatus(
-    userId: string,
-    id: string,
-    dto: UpdateOrderDto,
+ async updateStatus(
+  userId: string,
+  id: string,
+  dto: UpdateOrderDto,
+) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found.",
+    );
+  }
+
+  const order =
+    await db.query.orders.findFirst({
+      where: eq(
+        orders.id,
+        id,
+      ),
+    });
+
+  if (!order) {
+    throw new NotFoundException(
+      "Order not found.",
+    );
+  }
+
+  if (order.agencyId !== agency.id) {
+    throw new UnauthorizedException(
+      "You cannot update this order.",
+    );
+  }
+
+  const updateData: Partial<
+    typeof orders.$inferInsert
+  > = {
+    status: dto.status,
+    deliveryPerson:
+      dto.deliveryPerson,
+    deliveryPhone:
+      dto.deliveryPhone,
+    trackingMessage:
+      dto.trackingMessage,
+  };
+
+  if (
+    dto.status === "ACCEPTED"
   ) {
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.userId,
-          userId,
-        ),
-      });
+    updateData.acceptedAt =
+      new Date();
+  }
 
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
+  if (
+    dto.status === "SCHEDULED"
+  ) {
+    updateData.scheduledDate =
+      dto.scheduledDate
+        ? new Date(
+            dto.scheduledDate,
+          )
+        : null;
+  }
 
-    const order =
-      await db.query.orders.findFirst({
-        where: eq(
-          orders.id,
-          id,
-        ),
-      });
+  if (
+    dto.status ===
+    "OUT_FOR_DELIVERY"
+  ) {
+    updateData.outForDeliveryAt =
+      new Date();
+  }
 
-    if (!order) {
-      throw new NotFoundException(
-        "Order not found.",
-      );
-    }
+  if (
+    dto.status ===
+    "DELIVERED"
+  ) {
+    updateData.deliveredAt =
+      new Date();
 
-    if (
-      order.agencyId !==
-      agency.id
-    ) {
-      throw new UnauthorizedException(
-        "You cannot update this order.",
-      );
-    }
+    updateData.rewardPoints = 5;
+  }
 
+  const [updated] =
     await db
       .update(orders)
-      .set({
-        status: dto.status,
-        deliveryPerson:
-          dto.deliveryPerson,
-        deliveredAt:
-          dto.status ===
-          "DELIVERED"
-            ? new Date()
-            : undefined,
-      })
+      .set(updateData)
       .where(
         eq(
           orders.id,
           id,
         ),
-      );
+      )
+      .returning();
 
-    return {
-      success: true,
-      message:
-        "Order updated successfully.",
-    };
+  // Reward shop once
+  if (
+    dto.status ===
+      "DELIVERED" &&
+    order.rewardPoints === 0
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.id,
+          order.shopId,
+        ),
+      });
+
+    if (shop) {
+      await db
+        .update(shops)
+        .set({
+          rewardPoints:
+            shop.rewardPoints + 5,
+        })
+        .where(
+          eq(
+            shops.id,
+            shop.id,
+          ),
+        );
+    }
   }
+
+  return {
+    success: true,
+    message:
+      "Order updated successfully.",
+    order: updated,
+  };
+}
 }
