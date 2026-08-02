@@ -99,115 +99,150 @@ export class ProductsService {
   // ==========================================
 
   async findAll() {
-    const data =
-      await db.query.products.findMany();
+  const data = await db.query.products.findMany();
 
-    return Promise.all(
-      data.map(async (product) => {
-       let key = product.image;
+  return Promise.all(
+    data.map(async (product) => {
+      let key = product.image;
 
-if (key.startsWith("http")) {
-  key = key
-    .split("?")[0]
-    .split("/")
-    .pop()!;
+      if (key.startsWith("http")) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      const agency =
+        await db.query.agencies.findFirst({
+          where: eq(
+            agencies.id,
+            product.agencyId,
+          ),
+        });
+
+      return {
+        ...product,
+
+        agencyName:
+          agency?.agencyName ?? "",
+
+        ownerName:
+          agency?.ownerName ?? "",
+
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+      };
+    }),
+  );
 }
-
-        return {
-          ...product,
-          image:
-            await this.s3Service.getSignedImageUrl(
-              key,
-            ),
-        };
-      }),
-    );
-  }
 
   // ==========================================
   // PRODUCTS BY AGENCY
   // ==========================================
 
-  async findByAgency(
-    agencyId: string,
-  ) {
-    const data = await db
-      .select()
-      .from(products)
-      .where(
-        eq(
-          products.agencyId,
-          agencyId,
-        ),
-      );
+ async findByAgency(
+  agencyId: string,
+) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        agencyId,
+      ),
+    });
 
-    return Promise.all(
-      data.map(async (product) => {
-        let key = product.image;
-
-if (key.startsWith("http")) {
-  key = key
-    .split("?")[0]
-    .split("/")
-    .pop()!;
-}
-
-        return {
-          ...product,
-          image:
-            await this.s3Service.getSignedImageUrl(
-              key,
-            ),
-        };
-      }),
+  const data = await db
+    .select()
+    .from(products)
+    .where(
+      eq(
+        products.agencyId,
+        agencyId,
+      ),
     );
-  }
+
+  return Promise.all(
+    data.map(async (product) => {
+      let key = product.image;
+
+      if (key.startsWith("http")) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      return {
+        ...product,
+        agencyName:
+          agency?.agencyName ?? "",
+        ownerName:
+          agency?.ownerName ?? "",
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+      };
+    }),
+  );
+}
 
   // ==========================================
   // SINGLE PRODUCT
   // ==========================================
 
-  async findOne(id: string) {
-    if (
-      !id ||
-      id === "undefined"
-    ) {
-      throw new NotFoundException(
-        "Invalid product id.",
-      );
-    }
-
-    const product =
-      await db.query.products.findFirst({
-        where: eq(
-          products.id,
-          id,
-        ),
-      });
-
-    if (!product) {
-      throw new NotFoundException(
-        "Product not found.",
-      );
-    }
-
-   let key = product.image;
-
-if (key.startsWith("http")) {
-  key = key
-    .split("?")[0]
-    .split("/")
-    .pop()!;
-}
-
-    return {
-      ...product,
-      image:
-        await this.s3Service.getSignedImageUrl(
-          key,
-        ),
-    };
+ async findOne(id: string) {
+  if (!id || id === "undefined") {
+    throw new NotFoundException(
+      "Invalid product id.",
+    );
   }
+
+  const product =
+    await db.query.products.findFirst({
+      where: eq(
+        products.id,
+        id,
+      ),
+    });
+
+  if (!product) {
+    throw new NotFoundException(
+      "Product not found.",
+    );
+  }
+
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        product.agencyId,
+      ),
+    });
+
+  let key = product.image;
+
+  if (key.startsWith("http")) {
+    key = key
+      .split("?")[0]
+      .split("/")
+      .pop()!;
+  }
+
+  return {
+    ...product,
+    agencyName:
+      agency?.agencyName ?? "",
+    ownerName:
+      agency?.ownerName ?? "",
+    image:
+      await this.s3Service.getSignedImageUrl(
+        key,
+      ),
+  };
+}
 
   // ==========================================
   // UPDATE PRODUCT
