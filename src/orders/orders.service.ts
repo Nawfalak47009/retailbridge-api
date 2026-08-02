@@ -10,13 +10,20 @@ import {
   agencies,
   orders,
   shops,
+  orderItems,
+  products,
 } from "../db/schema";
+
+import { S3Service } from "../documents/s3.service";
 
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 
 @Injectable()
 export class OrdersService {
+  constructor(
+    private readonly s3Service: S3Service,
+  ) {}
   // ===========================
   // SHOP - CREATE ORDER
   // ===========================
@@ -119,32 +126,176 @@ export class OrdersService {
   // ===========================
 
   async findByShop(
-    userId: string,
-  ) {
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.userId,
-          userId,
-        ),
-      });
+  userId: string,
+) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
 
-    if (!shop) {
-      throw new NotFoundException(
-        "Shop not found.",
-      );
-    }
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
 
-    return db.query.orders.findMany({
+  const shopOrders =
+    await db.query.orders.findMany({
       where: eq(
         orders.shopId,
         shop.id,
       ),
-      orderBy: (orders, { desc }) => [
-        desc(orders.createdAt),
+      orderBy: (
+        orders,
+        { desc },
+      ) => [
+        desc(
+          orders.createdAt,
+        ),
       ],
     });
+
+ const response: any[] = [];
+
+for (const order of shopOrders) {
+
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        order.agencyId,
+      ),
+    });
+
+  const items =
+    await db.query.orderItems.findMany({
+      where: eq(
+        orderItems.orderId,
+        order.id,
+      ),
+    });
+
+  const productsData: any[] = [];
+
+  let totalAmount = 0;
+
+  let totalQuantity = 0;
+
+    for (const item of items) {
+      const product =
+        await db.query.products.findFirst({
+          where: eq(
+            products.id,
+            item.productId,
+          ),
+        });
+
+      if (!product) continue;
+
+      let key = product.image;
+
+      if (
+        key.startsWith("http")
+      ) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      const quantity =
+        Number(item.cases);
+
+      const price =
+        Number(product.price);
+
+      totalAmount +=
+        quantity * price;
+
+      totalQuantity +=
+        quantity;
+
+      productsData.push({
+        id: product.id,
+
+        name: product.name,
+
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+
+        price,
+
+        quantity,
+
+        unit:
+          product.unit,
+
+        quantityPerUnit:
+          product.quantityPerUnit,
+      });
+    }
+
+    response.push({
+      id: order.id,
+
+      orderNumber:
+        order.orderNumber,
+
+      status:
+        order.status,
+
+      createdAt:
+        order.createdAt,
+
+      remarks:
+        order.remarks,
+
+      totalAmount,
+
+      totalQuantity,
+
+      totalItems:
+        productsData.length,
+
+      rewardPoints:
+        order.rewardPoints,
+
+      deliveryPerson:
+        order.deliveryPerson,
+
+      deliveryPhone:
+        order.deliveryPhone,
+
+      trackingMessage:
+        order.trackingMessage,
+
+      scheduledDate:
+        order.scheduledDate,
+
+      agency: {
+        id: agency?.id,
+
+        agencyName:
+          agency?.agencyName,
+
+        ownerName:
+          agency?.ownerName,
+
+        phone:
+          agency?.phone,
+      },
+
+      items: productsData,
+    });
   }
+
+  return response;
+}
 
   // ===========================
   // GET SINGLE ORDER
@@ -169,9 +320,9 @@ export class OrdersService {
     );
   }
 
-  if (role === "ADMIN") {
-    return order;
-  }
+  // --------------------------
+  // Authorization
+  // --------------------------
 
   if (role === "AGENCY") {
     const agency =
@@ -184,14 +335,12 @@ export class OrdersService {
 
     if (
       !agency ||
-      order.agencyId !== agency.id
+      agency.id !== order.agencyId
     ) {
       throw new UnauthorizedException(
         "Unauthorized.",
       );
     }
-
-    return order;
   }
 
   if (role === "SHOP") {
@@ -205,19 +354,188 @@ export class OrdersService {
 
     if (
       !shop ||
-      order.shopId !== shop.id
+      shop.id !== order.shopId
     ) {
       throw new UnauthorizedException(
         "Unauthorized.",
       );
     }
-
-    return order;
   }
 
-  throw new UnauthorizedException(
-    "Unauthorized.",
-  );
+  // --------------------------
+  // Agency
+  // --------------------------
+
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        order.agencyId,
+      ),
+    });
+
+  // --------------------------
+  // Shop
+  // --------------------------
+
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.id,
+        order.shopId,
+      ),
+    });
+
+  // --------------------------
+  // Items
+  // --------------------------
+
+  const items =
+    await db.query.orderItems.findMany({
+      where: eq(
+        orderItems.orderId,
+        order.id,
+      ),
+    });
+
+  const productsData: any[] = [];
+
+  let totalAmount = 0;
+
+  let totalQuantity = 0;
+
+  for (const item of items) {
+    const product =
+      await db.query.products.findFirst({
+        where: eq(
+          products.id,
+          item.productId,
+        ),
+      });
+
+    if (!product) continue;
+
+    let key = product.image;
+
+    if (key.startsWith("http")) {
+      key = key
+        .split("?")[0]
+        .split("/")
+        .pop()!;
+    }
+
+    const quantity =
+      Number(item.cases);
+
+    const price =
+      Number(product.price);
+
+    totalAmount +=
+      quantity * price;
+
+    totalQuantity +=
+      quantity;
+
+    productsData.push({
+      id: product.id,
+
+      name: product.name,
+
+      image:
+        await this.s3Service.getSignedImageUrl(
+          key,
+        ),
+
+      quantity,
+
+      price,
+
+      subtotal:
+        quantity * price,
+
+      unit:
+        product.unit,
+
+      quantityPerUnit:
+        product.quantityPerUnit,
+    });
+  }
+
+  return {
+    id: order.id,
+
+    orderNumber:
+      order.orderNumber,
+
+    status:
+      order.status,
+
+    paymentStatus:
+      order.paymentStatus,
+
+    createdAt:
+      order.createdAt,
+
+    acceptedAt:
+      order.acceptedAt,
+
+    scheduledDate:
+      order.scheduledDate,
+
+    outForDeliveryAt:
+      order.outForDeliveryAt,
+
+    deliveredAt:
+      order.deliveredAt,
+
+    remarks:
+      order.remarks,
+
+    trackingMessage:
+      order.trackingMessage,
+
+    deliveryPerson:
+      order.deliveryPerson,
+
+    deliveryPhone:
+      order.deliveryPhone,
+
+    rewardPoints:
+      order.rewardPoints,
+
+    totalItems:
+      productsData.length,
+
+    totalQuantity,
+
+    totalAmount,
+
+    agency: agency && {
+      id: agency.id,
+      agencyName:
+        agency.agencyName,
+      ownerName:
+        agency.ownerName,
+      phone:
+        agency.phone,
+    },
+
+    shop: shop && {
+      id: shop.id,
+      shopName:
+        shop.shopName,
+      ownerName:
+        shop.ownerName,
+      phone:
+        shop.phone,
+      address:
+        shop.address,
+      pincode:
+        shop.pincode,
+    },
+
+    items: productsData,
+  };
 }
 
   // ===========================
