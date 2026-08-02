@@ -99,4 +99,20 @@ export class CartController {
       user.id,
     );
   }
+
+  // =====================================
+// CHECKOUT
+// =====================================
+
+@Post("checkout")
+checkout(
+  @CurrentUser() user: JwtUser,
+  @Body() dto: CheckoutDto,
+) {
+  return this.cartService.checkout(
+    user.id,
+    dto,
+  );
+}
+
 }
