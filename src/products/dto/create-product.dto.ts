@@ -5,9 +5,6 @@ import {
 
 export class CreateProductDto {
   @IsString()
-  agencyId!: string;
-
-  @IsString()
   name!: string;
 
   @IsString()

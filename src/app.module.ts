@@ -11,10 +11,11 @@ import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { AgencyShopsModule } from './agency-shops/agency-shops.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { CartModule } from './cart/cart.module';
 
 
 @Module({
-  imports: [AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, AgencyShopsModule, ProfilesModule],
+  imports: [AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, AgencyShopsModule, ProfilesModule, CartModule],
   controllers: [AppController],
   providers: [AppService],
 })
