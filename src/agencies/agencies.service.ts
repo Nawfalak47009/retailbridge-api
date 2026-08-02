@@ -12,22 +12,25 @@ import {
 
 @Injectable()
 export class AgenciesService {
-  // ==========================
-  // Get All Approved Agencies
-  // ==========================
+  // ==========================================
+  // ALL APPROVED AGENCIES
+  // ==========================================
+
   async findAll() {
     const agencyList =
       await db.query.agencies.findMany();
 
-    const result: {
-      id: string;
-      agencyName: string;
-      ownerName: string;
-      phone: string;
-      address: string;
-      logo: string;
-      description: string;
-    }[] = [];
+   const result: {
+  id: string;
+  agencyName: string;
+  ownerName: string;
+  phone: string;
+  address: string;
+  logo: string;
+  description: string;
+  productCount: number;
+  categories: string[];
+}[] = [];
 
     for (const agency of agencyList) {
       const user =
@@ -54,29 +57,58 @@ export class AgenciesService {
           ),
         });
 
+      const productList =
+        await db.query.products.findMany({
+          where: eq(
+            products.agencyId,
+            agency.id,
+          ),
+        });
+
+      const categories = [
+        ...new Set(
+          productList.map(
+            (product) =>
+              product.category,
+          ),
+        ),
+      ];
+
       result.push({
         id: agency.id,
+
         agencyName:
           agency.agencyName,
+
         ownerName:
           agency.ownerName,
+
         phone:
           agency.phone,
+
         address:
           profile?.address ?? "",
+
         logo:
           profile?.logo ?? "",
+
         description:
           profile?.description ?? "",
+
+        productCount:
+          productList.length,
+
+        categories,
       });
     }
 
     return result;
   }
 
-  // ==========================
-  // Get Single Agency
-  // ==========================
+  // ==========================================
+  // SINGLE AGENCY
+  // ==========================================
+
   async findOne(id: string) {
     const agency =
       await db.query.agencies.findFirst({
@@ -89,7 +121,8 @@ export class AgenciesService {
     if (!agency) {
       return {
         success: false,
-        message: "Agency not found",
+        message:
+          "Agency not found",
       };
     }
 
@@ -109,15 +142,27 @@ export class AgenciesService {
         ),
       });
 
+    const categories = [
+      ...new Set(
+        productList.map(
+          (product) =>
+            product.category,
+        ),
+      ),
+    ];
+
     return {
       success: true,
 
       agency: {
         id: agency.id,
+
         agencyName:
           agency.agencyName,
+
         ownerName:
           agency.ownerName,
+
         phone:
           agency.phone,
 
@@ -132,6 +177,8 @@ export class AgenciesService {
 
         productCount:
           productList.length,
+
+        categories,
       },
     };
   }
