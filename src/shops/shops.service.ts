@@ -74,7 +74,7 @@ async profile(userId: string) {
       ),
     });
 
-    const allAgencies =
+   const allAgencies =
   await db.query.agencies.findMany();
 
   const shopOrders =
@@ -90,7 +90,7 @@ async profile(userId: string) {
 
     shop,
 
-    stats: {
+   stats: {
   totalAgencies:
     allAgencies.length,
 
@@ -194,6 +194,9 @@ async updateAddress(
         ),
       });
 
+      const allAgencies =
+  await db.query.agencies.findMany();
+
     const shopOrders =
       await db.query.orders.findMany({
         where: eq(
@@ -216,26 +219,29 @@ async updateAddress(
       shop,
 
       stats: {
-        connectedAgencies:
-          connectedAgencies.length,
+  totalAgencies:
+    allAgencies.length,
 
-        totalOrders:
-          shopOrders.length,
+  connectedAgencies:
+    connectedAgencies.length,
 
-        pendingOrders:
-          shopOrders.filter(
-            (order) =>
-              order.status ===
-              "PENDING",
-          ).length,
+  totalOrders:
+    shopOrders.length,
 
-        deliveredOrders:
-          shopOrders.filter(
-            (order) =>
-              order.status ===
-              "DELIVERED",
-          ).length,
-      },
+  pendingOrders:
+    shopOrders.filter(
+      (order) =>
+        order.status ===
+        "PENDING",
+    ).length,
+
+  deliveredOrders:
+    shopOrders.filter(
+      (order) =>
+        order.status ===
+        "DELIVERED",
+    ).length,
+},
 
       recentOrders:
         shopOrders.slice(
