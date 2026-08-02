@@ -13,6 +13,7 @@ import {
   cartItems,
   products,
   shops,
+  agencies,
 } from "../db/schema";
 
 import {
@@ -153,84 +154,68 @@ return {
   }
 
   async getCart(userId: string) {
-  // Find logged-in shop
-  const shop =
-    await db.query.shops.findFirst({
-      where: eq(
-        shops.userId,
-        userId,
-      ),
-    });
+  const shop = await db.query.shops.findFirst({
+    where: eq(shops.userId, userId),
+  });
 
   if (!shop) {
-    throw new NotFoundException(
-      "Shop not found.",
-    );
+    throw new NotFoundException("Shop not found.");
   }
 
-  // Find all carts belonging to this shop
-  const userCarts =
-    await db.query.carts.findMany({
-      where: eq(
-        carts.shopId,
-        shop.id,
-      ),
-    });
+  const userCarts = await db.query.carts.findMany({
+    where: eq(carts.shopId, shop.id),
+  });
 
   const result: any[] = [];
 
   for (const cart of userCarts) {
-    const items =
-      await db.query.cartItems.findMany({
-        where: eq(
-          cartItems.cartId,
-          cart.id,
-        ),
-      });
+    // Agency
+    const agency = await db.query.agencies.findFirst({
+      where: eq(agencies.id, cart.agencyId),
+    });
 
-    const productsData =
-      await Promise.all(
-        items.map(async (item) => {
-          const product =
-            await db.query.products.findFirst({
-              where: eq(
-                products.id,
-                item.productId,
-              ),
-            });
+    // Cart Items
+    const items = await db.query.cartItems.findMany({
+      where: eq(cartItems.cartId, cart.id),
+    });
 
-          if (!product) {
-            return null;
-          }
+    const productsData = await Promise.all(
+      items.map(async (item) => {
+        const product = await db.query.products.findFirst({
+          where: eq(products.id, item.productId),
+        });
 
-          const key =
-            product.image
-              .split("/")
-              .pop()!;
+        if (!product) {
+          return null;
+        }
 
-          return {
-            id: item.id,
-            quantity:
-              item.quantity,
-            product: {
-              ...product,
-              image:
-                await this.s3Service.getSignedImageUrl(
-                  key,
-                ),
-            },
-          };
-        }),
-      );
+        let key = product.image;
+
+        if (key.startsWith("http")) {
+          key = key
+            .split("?")[0]
+            .split("/")
+            .pop()!;
+        }
+
+        return {
+          id: item.id,
+          quantity: item.quantity,
+          product: {
+            ...product,
+            image: await this.s3Service.getSignedImageUrl(
+              key,
+            ),
+          },
+        };
+      }),
+    );
 
     result.push({
       cartId: cart.id,
-      agencyId:
-        cart.agencyId,
-      items:
-        productsData.filter(
-          Boolean,
-        ),
+      agencyId: cart.agencyId,
+      agencyName: agency?.agencyName ?? "Agency",
+      items: productsData.filter(Boolean),
     });
   }
 
