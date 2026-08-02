@@ -46,7 +46,7 @@ export class ShopsService {
     };
   }
 
-  // =====================================
+// =====================================
 // Shop Profile
 // =====================================
 
@@ -65,12 +65,50 @@ async profile(userId: string) {
     );
   }
 
+  const connectedAgencies =
+    await db.query.agencyShops.findMany({
+      where: eq(
+        agencyShops.shopId,
+        shop.id,
+      ),
+    });
+
+  const shopOrders =
+    await db.query.orders.findMany({
+      where: eq(
+        orders.shopId,
+        shop.id,
+      ),
+    });
+
   return {
     success: true,
+
     shop,
+
+    stats: {
+      totalOrders:
+        shopOrders.length,
+
+      deliveredOrders:
+        shopOrders.filter(
+          (o) =>
+            o.status ===
+            "DELIVERED",
+        ).length,
+
+      pendingOrders:
+        shopOrders.filter(
+          (o) =>
+            o.status ===
+            "PENDING",
+        ).length,
+
+      connectedAgencies:
+        connectedAgencies.length,
+    },
   };
 }
-
 // =====================================
 // Update Address
 // =====================================
