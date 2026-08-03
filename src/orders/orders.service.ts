@@ -256,6 +256,151 @@ export class OrdersService {
   return response;
 }
 
+
+// ===========================
+// SHOP - MY ORDERS
+// ===========================
+
+async findByShop(
+  userId: string,
+) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  const shopOrders =
+    await db.query.orders.findMany({
+      where: eq(
+        orders.shopId,
+        shop.id,
+      ),
+      orderBy: (
+        orders,
+        { desc },
+      ) => [
+        desc(
+          orders.createdAt,
+        ),
+      ],
+    });
+
+  const response: any[] = [];
+
+  for (const order of shopOrders) {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          order.agencyId,
+        ),
+      });
+
+    const items =
+      await db.query.orderItems.findMany({
+        where: eq(
+          orderItems.orderId,
+          order.id,
+        ),
+      });
+
+    const productsData: any[] = [];
+
+    let totalAmount = 0;
+    let totalQuantity = 0;
+
+    for (const item of items) {
+      const product =
+        await db.query.products.findFirst({
+          where: eq(
+            products.id,
+            item.productId,
+          ),
+        });
+
+      if (!product) continue;
+
+      let key = product.image;
+
+      if (key.startsWith("http")) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      const quantity = Number(item.cases);
+      const price = Number(product.price);
+
+      totalAmount += quantity * price;
+      totalQuantity += quantity;
+
+      productsData.push({
+        id: product.id,
+        name: product.name,
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+        quantity,
+        price,
+        subtotal: quantity * price,
+        unit: product.unit,
+        quantityPerUnit:
+          product.quantityPerUnit,
+      });
+    }
+
+    response.push({
+      id: order.id,
+      orderNumber:
+        order.orderNumber,
+      status: order.status,
+      createdAt:
+        order.createdAt,
+      remarks:
+        order.remarks,
+      totalAmount,
+      totalQuantity,
+      totalItems:
+        productsData.length,
+      rewardPoints:
+        order.rewardPoints,
+      deliveryPerson:
+        order.deliveryPerson,
+      deliveryPhone:
+        order.deliveryPhone,
+      trackingMessage:
+        order.trackingMessage,
+      scheduledDate:
+        order.scheduledDate,
+
+      agency: agency && {
+        id: agency.id,
+        agencyName:
+          agency.agencyName,
+        ownerName:
+          agency.ownerName,
+        phone:
+          agency.phone,
+      },
+
+      items: productsData,
+    });
+  }
+
+  return response;
+}
+
   // ===========================
   // GET SINGLE ORDER
   // ===========================
