@@ -94,59 +94,27 @@ export class OrdersService {
   // ===========================
 
   async findByAgency(
-    userId: string,
-  ) {
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.userId,
-          userId,
-        ),
-      });
-
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
-
-    return db.query.orders.findMany({
-      where: eq(
-        orders.agencyId,
-        agency.id,
-      ),
-      orderBy: (orders, { desc }) => [
-        desc(orders.createdAt),
-      ],
-    });
-  }
-
-  // ===========================
-  // SHOP - MY ORDERS
-  // ===========================
-
-  async findByShop(
   userId: string,
 ) {
-  const shop =
-    await db.query.shops.findFirst({
+  const agency =
+    await db.query.agencies.findFirst({
       where: eq(
-        shops.userId,
+        agencies.userId,
         userId,
       ),
     });
 
-  if (!shop) {
+  if (!agency) {
     throw new NotFoundException(
-      "Shop not found.",
+      "Agency not found.",
     );
   }
 
-  const shopOrders =
+  const agencyOrders =
     await db.query.orders.findMany({
       where: eq(
-        orders.shopId,
-        shop.id,
+        orders.agencyId,
+        agency.id,
       ),
       orderBy: (
         orders,
@@ -158,31 +126,30 @@ export class OrdersService {
       ],
     });
 
- const response: any[] = [];
+  const response: any[] = [];
 
-for (const order of shopOrders) {
+  for (const order of agencyOrders) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.id,
+          order.shopId,
+        ),
+      });
 
-  const agency =
-    await db.query.agencies.findFirst({
-      where: eq(
-        agencies.id,
-        order.agencyId,
-      ),
-    });
+    const items =
+      await db.query.orderItems.findMany({
+        where: eq(
+          orderItems.orderId,
+          order.id,
+        ),
+      });
 
-  const items =
-    await db.query.orderItems.findMany({
-      where: eq(
-        orderItems.orderId,
-        order.id,
-      ),
-    });
+    const productsData: any[] = [];
 
-  const productsData: any[] = [];
+    let totalAmount = 0;
 
-  let totalAmount = 0;
-
-  let totalQuantity = 0;
+    let totalQuantity = 0;
 
     for (const item of items) {
       const product =
@@ -197,9 +164,7 @@ for (const order of shopOrders) {
 
       let key = product.image;
 
-      if (
-        key.startsWith("http")
-      ) {
+      if (key.startsWith("http")) {
         key = key
           .split("?")[0]
           .split("/")
@@ -220,21 +185,17 @@ for (const order of shopOrders) {
 
       productsData.push({
         id: product.id,
-
         name: product.name,
-
         image:
           await this.s3Service.getSignedImageUrl(
             key,
           ),
-
-        price,
-
         quantity,
-
+        price,
+        subtotal:
+          quantity * price,
         unit:
           product.unit,
-
         quantityPerUnit:
           product.quantityPerUnit,
       });
@@ -242,23 +203,17 @@ for (const order of shopOrders) {
 
     response.push({
       id: order.id,
-
       orderNumber:
         order.orderNumber,
-
       status:
         order.status,
-
       createdAt:
         order.createdAt,
-
       remarks:
         order.remarks,
 
       totalAmount,
-
       totalQuantity,
-
       totalItems:
         productsData.length,
 
@@ -277,20 +232,24 @@ for (const order of shopOrders) {
       scheduledDate:
         order.scheduledDate,
 
-      agency: {
-        id: agency?.id,
-
-        agencyName:
-          agency?.agencyName,
-
+      shop: shop && {
+        id: shop.id,
+        shopName:
+          shop.shopName,
         ownerName:
-          agency?.ownerName,
-
+          shop.ownerName,
         phone:
-          agency?.phone,
+          shop.phone,
+        address:
+          shop.address,
+        pincode:
+          shop.pincode,
+        category:
+          shop.category,
       },
 
-      items: productsData,
+      items:
+        productsData,
     });
   }
 
