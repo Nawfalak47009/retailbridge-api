@@ -302,12 +302,27 @@ export class ProductsService {
         )
         .returning();
 
-    return {
-      success: true,
-      message:
-        "Product updated successfully.",
-      product: updated,
-    };
+    let key = updated.image;
+
+if (key.startsWith("http")) {
+  key = key
+    .split("?")[0]
+    .split("/")
+    .pop()!;
+}
+
+return {
+  success: true,
+  message:
+    "Product updated successfully.",
+  product: {
+    ...updated,
+    image:
+      await this.s3Service.getSignedImageUrl(
+        key,
+      ),
+  },
+};
   }
 
   // ==========================================
