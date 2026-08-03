@@ -8,6 +8,10 @@ import {
   agencyProfiles,
   users,
   products,
+  orders,
+  orderItems,
+  agencyShops,
+  shops,
 } from "../db/schema";
 
 @Injectable()
@@ -182,4 +186,244 @@ export class AgenciesService {
       },
     };
   }
+
+  async dashboard(userId: string) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
+
+  if (!agency) {
+    return {
+      success: false,
+      message: "Agency not found",
+    };
+  }
+
+  const profile =
+    await db.query.agencyProfiles.findFirst({
+      where: eq(
+        agencyProfiles.agencyId,
+        agency.id,
+      ),
+    });
+
+  const productList =
+    await db.query.products.findMany({
+      where: eq(
+        products.agencyId,
+        agency.id,
+      ),
+    });
+
+  const agencyOrders =
+    await db.query.orders.findMany({
+      where: eq(
+        orders.agencyId,
+        agency.id,
+      ),
+    });
+
+  const connectedShops =
+    await db.query.agencyShops.findMany({
+      where: eq(
+        agencyShops.agencyId,
+        agency.id,
+      ),
+    });
+
+  let totalRevenue = 0;
+  let totalCasesSold = 0;
+
+  const productSales: Record<
+    string,
+    {
+      name: string;
+      sold: number;
+    }
+  > = {};
+
+  const shopOrders: Record<
+    string,
+    {
+      shopName: string;
+      orders: number;
+    }
+  > = {};
+
+  for (const order of agencyOrders) {
+    if (
+      order.status !== "DELIVERED"
+    ) {
+      continue;
+    }
+
+    totalRevenue += Number(
+      order.totalAmount ?? 0,
+    );
+
+    const items =
+      await db.query.orderItems.findMany({
+        where: eq(
+          orderItems.orderId,
+          order.id,
+        ),
+      });
+
+    for (const item of items) {
+      totalCasesSold += Number(
+        item.cases ?? 0,
+      );
+
+      const product =
+        await db.query.products.findFirst({
+          where: eq(
+            products.id,
+            item.productId,
+          ),
+        });
+
+      if (product) {
+        if (
+          !productSales[
+            product.id
+          ]
+        ) {
+          productSales[
+            product.id
+          ] = {
+            name: product.name,
+            sold: 0,
+          };
+        }
+
+        productSales[
+          product.id
+        ].sold += Number(
+          item.cases,
+        );
+      }
+    }
+
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.id,
+          order.shopId,
+        ),
+      });
+
+    if (shop) {
+      if (
+        !shopOrders[
+          shop.id
+        ]
+      ) {
+        shopOrders[
+          shop.id
+        ] = {
+          shopName:
+            shop.shopName,
+          orders: 0,
+        };
+      }
+
+      shopOrders[
+        shop.id
+      ].orders++;
+    }
+  }
+
+  const topProducts =
+    Object.values(
+      productSales,
+    )
+      .sort(
+        (a, b) =>
+          b.sold -
+          a.sold,
+      )
+      .slice(0, 5);
+
+  const topShops =
+    Object.values(
+      shopOrders,
+    )
+      .sort(
+        (a, b) =>
+          b.orders -
+          a.orders,
+      )
+      .slice(0, 5);
+
+  return {
+    success: true,
+
+    agency: {
+      agencyName:
+        agency.agencyName,
+      ownerName:
+        agency.ownerName,
+      phone:
+        agency.phone,
+      address:
+        profile?.address ??
+        "",
+      logo:
+        profile?.logo ??
+        "",
+    },
+
+    stats: {
+      totalRevenue,
+
+      totalProducts:
+        productList.length,
+
+      activeProducts:
+        productList.filter(
+          (p) =>
+            p.isActive ===
+            "true",
+        ).length,
+
+      outOfStock:
+        productList.filter(
+          (p) =>
+            Number(
+              p.stock,
+            ) <= 0,
+        ).length,
+
+      connectedShops:
+        connectedShops.length,
+
+      totalOrders:
+        agencyOrders.length,
+
+      pendingOrders:
+        agencyOrders.filter(
+          (o) =>
+            o.status ===
+            "PENDING",
+        ).length,
+
+      deliveredOrders:
+        agencyOrders.filter(
+          (o) =>
+            o.status ===
+            "DELIVERED",
+        ).length,
+
+      totalCasesSold,
+    },
+
+    topProducts,
+
+    topShops,
+  };
+}
 }
