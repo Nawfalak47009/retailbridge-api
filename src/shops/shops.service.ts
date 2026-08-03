@@ -10,12 +10,18 @@ import {
   agencyShops,
   agencies,
   orders,
+  orderItems,
+  products,
 } from "../db/schema";
 
 import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
+import { S3Service } from "../documents/s3.service";
 
 @Injectable()
 export class ShopsService {
+  constructor(
+    private readonly s3Service: S3Service,
+  ) {}
   // =====================================
   // Submit Documents
   // =====================================
@@ -250,5 +256,150 @@ async updateAddress(
         ),
     };
   }
+
+  async frequentlyBought(
+  userId: string,
+) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  const shopOrders =
+    await db.query.orders.findMany({
+      where: eq(
+        orders.shopId,
+        shop.id,
+      ),
+    });
+
+  const frequency = new Map<
+    string,
+    {
+      orderedCount: number;
+      lastOrdered: Date;
+    }
+  >();
+
+  for (const order of shopOrders) {
+    const items =
+      await db.query.orderItems.findMany({
+        where: eq(
+          orderItems.orderId,
+          order.id,
+        ),
+      });
+
+    for (const item of items) {
+      const existing =
+        frequency.get(
+          item.productId,
+        );
+
+      if (existing) {
+        existing.orderedCount +=
+          Number(item.cases);
+
+        if (
+          order.createdAt >
+          existing.lastOrdered
+        ) {
+          existing.lastOrdered =
+            order.createdAt;
+        }
+      } else {
+        frequency.set(
+          item.productId,
+          {
+            orderedCount:
+              Number(
+                item.cases,
+              ),
+            lastOrdered:
+              order.createdAt,
+          },
+        );
+      }
+    }
+  }
+
+  const result: any[] = [];
+
+  for (const [
+    productId,
+    stats,
+  ] of frequency.entries()) {
+    const product =
+      await db.query.products.findFirst({
+        where: eq(
+          products.id,
+          productId,
+        ),
+      });
+
+    if (!product) continue;
+
+    let key =
+      product.image;
+
+    if (
+      key.startsWith(
+        "http",
+      )
+    ) {
+      key = key
+        .split("?")[0]
+        .split("/")
+        .pop()!;
+    }
+
+    result.push({
+      id: product.id,
+
+      name: product.name,
+
+      image:
+        await this.s3Service.getSignedImageUrl(
+          key,
+        ),
+
+      unit:
+        product.unit,
+
+      quantityPerUnit:
+        product.quantityPerUnit,
+
+      price: Number(
+        product.price,
+      ),
+
+      orderedCount:
+        stats.orderedCount,
+
+      lastOrdered:
+        stats.lastOrdered,
+    });
+  }
+
+  result.sort(
+    (a, b) =>
+      b.orderedCount -
+      a.orderedCount,
+  );
+
+  return result.slice(0, 10);
 }
+}
+
+
+
 

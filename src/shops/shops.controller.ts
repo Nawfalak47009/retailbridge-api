@@ -107,4 +107,23 @@ export class ShopsController {
       user.id,
     );
   }
+
+  // =====================================
+// Frequently Bought Products
+// =====================================
+
+@Get("frequently-bought")
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("SHOP")
+frequentlyBought(
+  @CurrentUser() user: JwtUser,
+) {
+  return this.shopsService.frequentlyBought(
+    user.id,
+  );
 }
+}
+
