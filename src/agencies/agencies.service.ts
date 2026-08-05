@@ -426,4 +426,57 @@ export class AgenciesService {
     topShops,
   };
 }
+async updateProfile(
+  userId: string,
+  body: {
+    agencyName: string;
+    ownerName: string;
+    phone: string;
+    address: string;
+  },
+) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
+
+  if (!agency) {
+    return {
+      success: false,
+      message: "Agency not found",
+    };
+  }
+
+  // Update agency table
+  await db
+    .update(agencies)
+    .set({
+      agencyName: body.agencyName,
+      ownerName: body.ownerName,
+      phone: body.phone,
+    })
+    .where(eq(agencies.id, agency.id));
+
+  // Update profile table
+  await db
+    .update(agencyProfiles)
+    .set({
+      address: body.address,
+    })
+    .where(
+      eq(
+        agencyProfiles.agencyId,
+        agency.id,
+      ),
+    );
+
+  return {
+    success: true,
+    message:
+      "Profile updated successfully.",
+  };
+}
 }
