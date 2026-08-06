@@ -27,9 +27,19 @@ export class AgenciesController {
   // ==========================================
 
   @Get()
-  findAll() {
-    return this.agenciesService.findAll();
-  }
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("SHOP")
+findAll(
+  @CurrentUser()
+  user: any,
+) {
+  return this.agenciesService.findAll(
+    user.id,
+  );
+}
 
   // ==========================================
   // AGENCY DASHBOARD

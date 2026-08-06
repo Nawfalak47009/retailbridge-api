@@ -19,11 +19,34 @@ export class AgenciesService {
   // ALL APPROVED AGENCIES
   // ==========================================
 
-  async findAll() {
+async findAll(
+  userId?: string,
+) {
+  let assignedAgencyId: string | null =
+  null;
+
+if (userId) {
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (
+    shop &&
+    shop.registrationType ===
+      "AGENCY_CREATED"
+  ) {
+    assignedAgencyId =
+      shop.agencyId;
+  }
+}
     const agencyList =
       await db.query.agencies.findMany();
 
-   const result: {
+ const result: {
   id: string;
   agencyName: string;
   ownerName: string;
@@ -32,25 +55,33 @@ export class AgenciesService {
   logo: string;
   description: string;
   productCount: number;
+  shopCount: number;
   categories: string[];
 }[] = [];
 
     for (const agency of agencyList) {
-      const user =
-        await db.query.users.findFirst({
-          where: eq(
-            users.id,
-            agency.userId,
-          ),
-        });
+       if (
+    assignedAgencyId &&
+    agency.id !==
+      assignedAgencyId
+  ) {
+    continue;
+  }
 
-      // Only approved agencies
-      if (
-        !user ||
-        user.status !== "APPROVED"
-      ) {
-        continue;
-      }
+  const user =
+    await db.query.users.findFirst({
+      where: eq(
+        users.id,
+        agency.userId,
+      ),
+    });
+
+    if (
+  !user ||
+  user.status !== "APPROVED"
+) {
+  continue;
+}
 
       const profile =
         await db.query.agencyProfiles.findFirst({
@@ -68,6 +99,14 @@ export class AgenciesService {
           ),
         });
 
+        const connectedShops =
+  await db.query.shops.findMany({
+    where: eq(
+      shops.agencyId,
+      agency.id,
+    ),
+  });
+
       const categories = [
         ...new Set(
           productList.map(
@@ -78,31 +117,34 @@ export class AgenciesService {
       ];
 
       result.push({
-        id: agency.id,
+  id: agency.id,
 
-        agencyName:
-          agency.agencyName,
+  agencyName:
+    agency.agencyName,
 
-        ownerName:
-          agency.ownerName,
+  ownerName:
+    agency.ownerName,
 
-        phone:
-          agency.phone,
+  phone:
+    agency.phone,
 
-        address:
-          profile?.address ?? "",
+  address:
+    profile?.address ?? "",
 
-        logo:
-          profile?.logo ?? "",
+  logo:
+    profile?.logo ?? "",
 
-        description:
-          profile?.description ?? "",
+  description:
+    profile?.description ?? "",
 
-        productCount:
-          productList.length,
+  productCount:
+    productList.length,
 
-        categories,
-      });
+  shopCount:
+    connectedShops.length,
+
+  categories,
+});
     }
 
     return result;

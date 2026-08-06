@@ -137,29 +137,28 @@ async registerAgency(
       })
       .returning();
 
-   await db
-  .insert(shops)
-  .values({
-    userId: user.id,
+   await db.insert(shops).values({
+  userId: user.id,
 
-    // Shop is not yet linked to an agency
-    agencyId: "",
+  agencyId: "",
 
-    shopName: dto.shopName,
+  registrationType:
+    "SELF_REGISTERED",
 
-    ownerName: dto.ownerName,
+  shopName: dto.shopName,
 
-    phone: dto.phone,
+  ownerName: dto.ownerName,
 
-    address: dto.address,
+  phone: dto.phone,
 
-    pincode: dto.pincode,
+  address: dto.address,
 
-    // Will be assigned when an agency takes the shop
-    deliveryDay: "",
+  pincode: dto.pincode,
 
-    deliverySlot: "",
-  });
+  deliveryDay: "",
+
+  deliverySlot: "",
+});
 
     return {
       success: true,

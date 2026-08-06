@@ -77,6 +77,9 @@ const username =
 
   agencyId: agency.id,
 
+  registrationType:
+    "AGENCY_CREATED",
+
   shopName: dto.shopName,
 
   ownerName: dto.ownerName,

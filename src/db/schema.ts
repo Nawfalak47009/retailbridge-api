@@ -79,11 +79,15 @@ export const agencies = pgTable(
 export const shops = pgTable("shops", {
   id: uuid().defaultRandom().primaryKey(),
 
-  // Login account
   userId: varchar({ length: 255 }).notNull(),
 
-  // Agency owner
   agencyId: varchar({ length: 255 }).notNull(),
+
+  registrationType: varchar({
+    length: 30,
+  })
+    .default("SELF_REGISTERED")
+    .notNull(),
 
   shopName: varchar({ length: 255 }).notNull(),
 
