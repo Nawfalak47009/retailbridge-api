@@ -9,6 +9,7 @@ import { db } from "../db";
 import {
   agencies,
   products,
+  shops,
 } from "../db/schema";
 import { S3Service } from "../documents/s3.service";
 
@@ -90,8 +91,9 @@ export class ProductsService {
     }
 
     return this.findByAgency(
-      agency.id,
-    );
+  userId,
+  agency.id,
+);
   }
 
   // ==========================================
@@ -143,8 +145,36 @@ export class ProductsService {
   // ==========================================
 
  async findByAgency(
+  userId: string,
   agencyId: string,
 ) {
+  // Find logged-in shop
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  // Agency-created shops can only view
+  // their own agency's products.
+  if (
+    shop.registrationType ===
+      "AGENCY_CREATED" &&
+    shop.agencyId !== agencyId
+  ) {
+    throw new UnauthorizedException(
+      "You are not authorized to view this agency's products.",
+    );
+  }
+
   const agency =
     await db.query.agencies.findFirst({
       where: eq(
@@ -153,15 +183,22 @@ export class ProductsService {
       ),
     });
 
-  const data = await db
-    .select()
-    .from(products)
-    .where(
-      eq(
-        products.agencyId,
-        agencyId,
-      ),
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found.",
     );
+  }
+
+  const data =
+    await db
+      .select()
+      .from(products)
+      .where(
+        eq(
+          products.agencyId,
+          agencyId,
+        ),
+      );
 
   return Promise.all(
     data.map(async (product) => {
@@ -176,10 +213,13 @@ export class ProductsService {
 
       return {
         ...product,
+
         agencyName:
-          agency?.agencyName ?? "",
+          agency.agencyName,
+
         ownerName:
-          agency?.ownerName ?? "",
+          agency.ownerName,
+
         image:
           await this.s3Service.getSignedImageUrl(
             key,

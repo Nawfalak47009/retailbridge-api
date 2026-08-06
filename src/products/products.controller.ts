@@ -52,15 +52,24 @@ export class ProductsController {
     return this.productsService.findAll();
   }
 
-  @Get("agency/:agencyId")
-  findByAgency(
-    @Param("agencyId")
-    agencyId: string,
-  ) {
-    return this.productsService.findByAgency(
-      agencyId,
-    );
-  }
+ @Get("agency/:agencyId")
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("SHOP")
+findByAgency(
+  @CurrentUser()
+  user: JwtUser,
+
+  @Param("agencyId")
+  agencyId: string,
+) {
+  return this.productsService.findByAgency(
+    user.id,
+    agencyId,
+  );
+}
 
   @Get(":id")
   findOne(
