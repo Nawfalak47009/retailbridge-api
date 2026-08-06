@@ -84,6 +84,8 @@ const username =
 
   address: dto.address,
 
+  pincode: dto.pincode,
+
   deliveryDay: dto.deliveryDay,
 
   deliverySlot: dto.deliverySlot,
@@ -167,16 +169,17 @@ async updateShop(
   }
 
   await db
-    .update(shops)
-    .set({
-      shopName: dto.shopName,
-      ownerName: dto.ownerName,
-      phone: dto.phone,
-      address: dto.address,
-      deliveryDay: dto.deliveryDay,
-      deliverySlot: dto.deliverySlot,
-    })
-    .where(eq(shops.id, shopId));
+  .update(shops)
+  .set({
+    shopName: dto.shopName,
+    ownerName: dto.ownerName,
+    phone: dto.phone,
+    address: dto.address,
+    pincode: dto.pincode,
+    deliveryDay: dto.deliveryDay,
+    deliverySlot: dto.deliverySlot,
+  })
+  .where(eq(shops.id, shopId));
 
   return {
     success: true,

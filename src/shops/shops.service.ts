@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import {
   shops,
-  agencyShops,
   agencies,
   orders,
   orderItems,
@@ -72,15 +71,15 @@ async profile(userId: string) {
     );
   }
 
-  const connectedAgencies =
-    await db.query.agencyShops.findMany({
-      where: eq(
-        agencyShops.shopId,
-        shop.id,
-      ),
-    });
+ const connectedAgency =
+  await db.query.agencies.findFirst({
+    where: eq(
+      agencies.id,
+      shop.agencyId,
+    ),
+  });
 
-   const allAgencies =
+const allAgencies =
   await db.query.agencies.findMany();
 
   const shopOrders =
@@ -101,7 +100,7 @@ async profile(userId: string) {
     allAgencies.length,
 
   connectedAgencies:
-    connectedAgencies.length,
+    connectedAgency ? 1 : 0,
 
   totalOrders:
     shopOrders.length,
@@ -131,10 +130,10 @@ async updateAddress(
   body: {
     address: string;
     pincode: string;
-    landmark?: string;
   },
 ) {
   const shop =
+
     await db.query.shops.findFirst({
       where: eq(
         shops.userId,
@@ -152,9 +151,9 @@ async updateAddress(
     await db
       .update(shops)
       .set({
-        address: body.address,
-        pincode: body.pincode,
-      })
+  address: body.address,
+  pincode: body.pincode,
+})
       .where(
         eq(
           shops.id,
@@ -192,15 +191,15 @@ async updateAddress(
       );
     }
 
-    const connectedAgencies =
-      await db.query.agencyShops.findMany({
-        where: eq(
-          agencyShops.shopId,
-          shop.id,
-        ),
-      });
+  const connectedAgency =
+  await db.query.agencies.findFirst({
+    where: eq(
+      agencies.id,
+      shop.agencyId,
+    ),
+  });
 
-      const allAgencies =
+const allAgencies =
   await db.query.agencies.findMany();
 
     const shopOrders =
@@ -229,7 +228,7 @@ async updateAddress(
     allAgencies.length,
 
   connectedAgencies:
-    connectedAgencies.length,
+    connectedAgency ? 1 : 0,
 
   totalOrders:
     shopOrders.length,

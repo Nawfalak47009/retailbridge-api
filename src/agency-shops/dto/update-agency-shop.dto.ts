@@ -22,6 +22,10 @@ export class UpdateAgencyShopDto {
 
   @IsString()
   @IsNotEmpty()
+  pincode!: string;
+
+  @IsString()
+  @IsNotEmpty()
   deliveryDay!: string;
 
   @IsString()

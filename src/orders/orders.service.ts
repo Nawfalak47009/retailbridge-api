@@ -12,6 +12,7 @@ import {
   shops,
   orderItems,
   products,
+  rewardTransactions,
 } from "../db/schema";
 
 import { S3Service } from "../documents/s3.service";
@@ -232,21 +233,14 @@ export class OrdersService {
       scheduledDate:
         order.scheduledDate,
 
-      shop: shop && {
-        id: shop.id,
-        shopName:
-          shop.shopName,
-        ownerName:
-          shop.ownerName,
-        phone:
-          shop.phone,
-        address:
-          shop.address,
-        pincode:
-          shop.pincode,
-        category:
-          shop.category,
-      },
+     shop: shop && {
+  id: shop.id,
+  shopName: shop.shopName,
+  ownerName: shop.ownerName,
+  phone: shop.phone,
+  address: shop.address,
+  pincode: shop.pincode,
+},
 
       items:
         productsData,
@@ -746,34 +740,21 @@ async findByShop(
       .returning();
 
   // Reward shop once
-  if (
-    dto.status ===
-      "DELIVERED" &&
-    order.rewardPoints === 0
-  ) {
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.id,
-          order.shopId,
-        ),
-      });
-
-    if (shop) {
-      await db
-        .update(shops)
-        .set({
-          rewardPoints:
-            shop.rewardPoints + 5,
-        })
-        .where(
-          eq(
-            shops.id,
-            shop.id,
-          ),
-        );
-    }
-  }
+ // Reward shop once
+if (
+  dto.status === "DELIVERED" &&
+  order.rewardPoints === 0
+) {
+  await db
+    .insert(rewardTransactions)
+    .values({
+      shopId: order.shopId,
+      orderId: order.id,
+      points: 5,
+      type: "EARN",
+      description: "Order Delivered",
+    });
+}
 
   return {
     success: true,

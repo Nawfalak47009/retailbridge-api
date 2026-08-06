@@ -93,6 +93,8 @@ export const shops = pgTable("shops", {
 
   address: varchar({ length: 500 }).notNull(),
 
+  pincode: varchar({ length: 10 }).notNull(),
+
   deliveryDay: varchar({ length: 20 }).notNull(),
 
   deliverySlot: varchar({ length: 100 }).notNull(),

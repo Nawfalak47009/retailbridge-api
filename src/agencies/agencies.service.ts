@@ -10,7 +10,6 @@ import {
   products,
   orders,
   orderItems,
-  agencyShops,
   shops,
 } from "../db/schema";
 
@@ -226,14 +225,13 @@ export class AgenciesService {
         agency.id,
       ),
     });
-
-  const connectedShops =
-    await db.query.agencyShops.findMany({
-      where: eq(
-        agencyShops.agencyId,
-        agency.id,
-      ),
-    });
+const connectedShops =
+  await db.query.shops.findMany({
+    where: eq(
+      shops.agencyId,
+      agency.id,
+    ),
+  });
 
   let totalRevenue = 0;
   let totalCasesSold = 0;
