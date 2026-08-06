@@ -73,28 +73,55 @@ export class ProductsService {
   // MY PRODUCTS
   // ==========================================
 
-  async findMine(
-    userId: string,
-  ) {
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.userId,
-          userId,
-        ),
-      });
+async findMine(userId: string) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
 
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
-
-    return this.findByAgency(
-  userId,
-  agency.id,
-);
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found.",
+    );
   }
+
+  const data =
+    await db
+      .select()
+      .from(products)
+      .where(
+        eq(
+          products.agencyId,
+          agency.id,
+        ),
+      );
+
+  return Promise.all(
+    data.map(async (product) => {
+      let key = product.image;
+
+      if (key.startsWith("http")) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      return {
+        ...product,
+        agencyName: agency.agencyName,
+        ownerName: agency.ownerName,
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+      };
+    }),
+  );
+}
 
   // ==========================================
 // ALL PRODUCTS
@@ -191,7 +218,10 @@ async findAll(
  async findByAgency(
   userId: string,
   agencyId: string,
-) {
+) { console.log("==============");
+  console.log("FIND MINE");
+  console.log(userId);
+  console.log("==============");
   // Find logged-in shop
   const shop =
     await db.query.shops.findFirst({
