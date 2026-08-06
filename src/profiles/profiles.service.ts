@@ -219,18 +219,25 @@ const [profile] = await db
         ),
       });
 
-    return {
+   return {
   id: shop.id,
   shopId: shop.id,
 
   shopName: shop.shopName,
   ownerName: shop.ownerName,
   phone: shop.phone,
+
   address:
     profile?.address ??
     shop.address,
+
   pincode: shop.pincode,
-  category: shop.category,
+
+  deliveryDay:
+    shop.deliveryDay,
+
+  deliverySlot:
+    shop.deliverySlot,
 
   deliveryNotes:
     profile?.deliveryNotes ??
