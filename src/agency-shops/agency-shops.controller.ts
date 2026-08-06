@@ -127,4 +127,47 @@ findOne(
     shopId,
   );
 }
+// =====================================
+// Shop Credentials
+// =====================================
+
+@Get(":shopId/credentials")
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("AGENCY")
+credentials(
+  @CurrentUser() user: JwtUser,
+
+  @Param("shopId")
+  shopId: string,
+) {
+  return this.agencyShopsService.getCredentials(
+    user.id,
+    shopId,
+  );
+}
+
+// =====================================
+// Reset Shop Password
+// =====================================
+
+@Post(":shopId/reset-password")
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("AGENCY")
+resetPassword(
+  @CurrentUser() user: JwtUser,
+
+  @Param("shopId")
+  shopId: string,
+) {
+  return this.agencyShopsService.resetPassword(
+    user.id,
+    shopId,
+  );
+}
 }
