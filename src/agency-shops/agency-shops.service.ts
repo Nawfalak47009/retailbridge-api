@@ -187,6 +187,51 @@ async updateShop(
       "Shop updated successfully.",
   };
 }
+
+async findOne(
+  userId: string,
+  shopId: string,
+) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found.",
+    );
+  }
+
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.id,
+        shopId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  if (shop.agencyId !== agency.id) {
+    throw new NotFoundException(
+      "Unauthorized shop.",
+    );
+  }
+
+  return {
+    success: true,
+    shop,
+  };
+}
+
 async deleteShop(
   userId: string,
   shopId: string,

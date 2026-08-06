@@ -109,4 +109,22 @@ export class AgencyShopsController {
       id,
     );
   }
+
+  @Get(":shopId")
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("AGENCY")
+findOne(
+  @CurrentUser() user: JwtUser,
+
+  @Param("shopId")
+  shopId: string,
+) {
+  return this.agencyShopsService.findOne(
+    user.id,
+    shopId,
+  );
+}
 }
