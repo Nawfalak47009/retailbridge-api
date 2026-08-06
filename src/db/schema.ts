@@ -76,63 +76,29 @@ export const agencies = pgTable(
   }
 );
 
-export const shops = pgTable(
-  "shops",
-  {
-    id: uuid()
-      .defaultRandom()
-      .primaryKey(),
+export const shops = pgTable("shops", {
+  id: uuid().defaultRandom().primaryKey(),
 
-    userId: varchar({
-      length: 255,
-    }).notNull(),
+  // Login account
+  userId: varchar({ length: 255 }).notNull(),
 
-    shopName: varchar({
-      length: 255,
-    }).notNull(),
+  // Agency owner
+  agencyId: varchar({ length: 255 }).notNull(),
 
-    ownerName: varchar({
-      length: 255,
-    }).notNull(),
+  shopName: varchar({ length: 255 }).notNull(),
 
-    phone: varchar({
-      length: 20,
-    }).notNull(),
+  ownerName: varchar({ length: 255 }).notNull(),
 
-    address: varchar({
-      length: 500,
-    }).notNull(),
+  phone: varchar({ length: 20 }).notNull(),
 
-    pincode: varchar({
-      length: 20,
-    }).notNull(),
+  address: varchar({ length: 500 }).notNull(),
 
-    category: varchar({
-      length: 100,
-    }).notNull(),
+  deliveryDay: varchar({ length: 20 }).notNull(),
 
-    aadhaar: varchar({
-      length: 500,
-    }),
+  deliverySlot: varchar({ length: 100 }).notNull(),
 
-    shopPhoto: varchar({
-      length: 500,
-    }),
-
-    rewardPoints: integer()
-  .default(0)
-  .notNull(),
-
-walletBalance: integer()
-  .default(0)
-  .notNull(),
-
-upiId: varchar({
-  length: 150,
-}),
-  },
-);
-
+  createdAt: timestamp().defaultNow().notNull(),
+});
 export const documents =
   pgTable(
     "documents",
@@ -318,31 +284,6 @@ export const orderItems = pgTable(
   },
 );
 
-export const agencyShops = pgTable(
-  "agency_shops",
-  {
-    id: uuid()
-      .defaultRandom()
-      .primaryKey(),
-
-    agencyId: varchar({
-      length: 255,
-    }).notNull(),
-
-    shopId: varchar({
-      length: 255,
-    }).notNull(),
-
-    deliveryDay: varchar({
-      length: 20,
-    }).notNull(),
-
-    createdAt:
-      timestamp()
-        .defaultNow()
-        .notNull(),
-  },
-);
 
 export const agencyProfiles = pgTable(
   "agency_profiles",

@@ -1,13 +1,18 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   UseGuards,
 } from "@nestjs/common";
 
 import { AgencyShopsService } from "./agency-shops.service";
+
 import { CreateAgencyShopDto } from "./dto/create-agency-shop.dto";
+import { UpdateAgencyShopDto } from "./dto/update-agency-shop.dto";
 
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -22,7 +27,7 @@ export class AgencyShopsController {
   ) {}
 
   // =====================================
-  // Connect Shop to Agency
+  // Create Grocery Shop
   // =====================================
 
   @Post()
@@ -36,14 +41,14 @@ export class AgencyShopsController {
     @Body()
     dto: CreateAgencyShopDto,
   ) {
-    return this.agencyShopsService.create(
+    return this.agencyShopsService.createShop(
       user.id,
       dto,
     );
   }
 
   // =====================================
-  // My Connected Shops
+  // My Grocery Shops
   // =====================================
 
   @Get("my")
@@ -52,38 +57,56 @@ export class AgencyShopsController {
     RolesGuard,
   )
   @Roles("AGENCY")
-  findByAgency(
+  getMyShops(
     @CurrentUser() user: JwtUser,
   ) {
-    return this.agencyShopsService.findByAgency(
+    return this.agencyShopsService.getMyShops(
       user.id,
     );
   }
 
   // =====================================
-  // My Connected Agencies
+  // Update Shop
   // =====================================
 
-  @Get("shop")
+  @Patch(":id")
   @UseGuards(
     JwtAuthGuard,
     RolesGuard,
   )
-  @Roles("SHOP")
-  findByShop(
+  @Roles("AGENCY")
+  update(
     @CurrentUser() user: JwtUser,
+    @Param("id")
+    id: string,
+    @Body()
+    dto: UpdateAgencyShopDto,
   ) {
-    return this.agencyShopsService.findByShop(
+    return this.agencyShopsService.updateShop(
       user.id,
+      id,
+      dto,
     );
   }
 
   // =====================================
-  // Admin
+  // Delete Shop
   // =====================================
 
-  @Get()
-  findAll() {
-    return this.agencyShopsService.findAll();
+  @Delete(":id")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("AGENCY")
+  delete(
+    @CurrentUser() user: JwtUser,
+    @Param("id")
+    id: string,
+  ) {
+    return this.agencyShopsService.deleteShop(
+      user.id,
+      id,
+    );
   }
 }

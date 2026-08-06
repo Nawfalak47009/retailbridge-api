@@ -2,137 +2,240 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+
 import { eq } from "drizzle-orm";
 
+import * as bcrypt from "bcrypt";
+
 import { db } from "../db";
+
 import {
+  users,
   agencies,
-  agencyShops,
   shops,
 } from "../db/schema";
 
 import { CreateAgencyShopDto } from "./dto/create-agency-shop.dto";
+import { UpdateAgencyShopDto } from "./dto/update-agency-shop.dto";
 
 @Injectable()
 export class AgencyShopsService {
-  // =====================================
-  // Connect Shop
-  // =====================================
+  async createShop(
+  userId: string,
+  dto: CreateAgencyShopDto,
+) {
+  const agency =
+  await db.query.agencies.findFirst({
+    where: eq(
+      agencies.userId,
+      userId,
+    ),
+  });
 
-  async create(
-    userId: string,
-    dto: CreateAgencyShopDto,
-  ) {
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.userId,
-          userId,
-        ),
-      });
 
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
+if (!agency) {
+  throw new NotFoundException(
+    "Agency not found",
+  );
+}
 
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.id,
-          dto.shopId,
-        ),
-      });
 
-    if (!shop) {
-      throw new NotFoundException(
-        "Shop not found.",
-      );
-    }
+const shopCount =
+  await db.query.shops.findMany();
 
-    const [connection] =
-      await db
-        .insert(agencyShops)
-        .values({
-          agencyId: agency.id,
-          shopId: shop.id,
-          deliveryDay:
-            dto.deliveryDay,
-        })
-        .returning();
+const username =
+  `SHOP${String(
+    shopCount.length + 1,
+  ).padStart(4, "0")}`;
 
-    return {
-      success: true,
-      message:
-        "Shop assigned successfully.",
-      connection,
-    };
-  }
+  const password =
+  Math.random()
+    .toString(36)
+    .substring(2, 10)
+    .toUpperCase();
 
-  // =====================================
-  // Admin
-  // =====================================
+    const passwordHash =
+  await bcrypt.hash(
+    password,
+    10,
+  );
 
-  async findAll() {
-    return db.query.agencyShops.findMany();
-  }
+  const createdUser =
+  await db
+    .insert(users)
+    .values({
+      email: username,
+      password: passwordHash,
+      role: "SHOP",
+      status: "APPROVED",
+    })
+    .returning();
 
-  // =====================================
-  // Agency -> Connected Shops
-  // =====================================
+    await db.insert(shops).values({
+  userId: createdUser[0].id,
 
-  async findByAgency(
-    userId: string,
-  ) {
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.userId,
-          userId,
-        ),
-      });
+  agencyId: agency.id,
 
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
+  shopName: dto.shopName,
 
-    return db.query.agencyShops.findMany({
+  ownerName: dto.ownerName,
+
+  phone: dto.phone,
+
+  address: dto.address,
+
+  deliveryDay: dto.deliveryDay,
+
+  deliverySlot: dto.deliverySlot,
+});
+
+return {
+  success: true,
+
+  message: "Shop created successfully.",
+
+  credentials: {
+    username,
+    password,
+  },
+};
+
+
+
+}
+
+async getMyShops(userId: string) {
+  const agency =
+    await db.query.agencies.findFirst({
       where: eq(
-        agencyShops.agencyId,
-        agency.id,
+        agencies.userId,
+        userId,
       ),
     });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found",
+    );
   }
 
-  // =====================================
-  // Shop -> Connected Agencies
-  // =====================================
+  return await db.query.shops.findMany({
+    where: eq(
+      shops.agencyId,
+      agency.id,
+    ),
+  });
+}
 
-  async findByShop(
-    userId: string,
-  ) {
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.userId,
-          userId,
-        ),
-      });
-
-    if (!shop) {
-      throw new NotFoundException(
-        "Shop not found.",
-      );
-    }
-
-    return db.query.agencyShops.findMany({
+async updateShop(
+  userId: string,
+  shopId: string,
+  dto: UpdateAgencyShopDto,
+) {
+  const agency =
+    await db.query.agencies.findFirst({
       where: eq(
-        agencyShops.shopId,
-        shop.id,
+        agencies.userId,
+        userId,
       ),
     });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found",
+    );
   }
+
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.id,
+        shopId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found",
+    );
+  }
+
+  if (shop.agencyId !== agency.id) {
+    throw new NotFoundException(
+      "Unauthorized shop",
+    );
+  }
+
+  await db
+    .update(shops)
+    .set({
+      shopName: dto.shopName,
+      ownerName: dto.ownerName,
+      phone: dto.phone,
+      address: dto.address,
+      deliveryDay: dto.deliveryDay,
+      deliverySlot: dto.deliverySlot,
+    })
+    .where(eq(shops.id, shopId));
+
+  return {
+    success: true,
+    message:
+      "Shop updated successfully.",
+  };
+}
+async deleteShop(
+  userId: string,
+  shopId: string,
+) {
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.userId,
+        userId,
+      ),
+    });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found",
+    );
+  }
+
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.id,
+        shopId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found",
+    );
+  }
+
+  if (shop.agencyId !== agency.id) {
+    throw new NotFoundException(
+      "Unauthorized shop",
+    );
+  }
+
+  // Delete login account
+  await db
+    .delete(users)
+    .where(eq(users.id, shop.userId));
+
+  // Delete shop
+  await db
+    .delete(shops)
+    .where(eq(shops.id, shopId));
+
+  return {
+    success: true,
+    message:
+      "Shop deleted successfully.",
+  };
+}
 }

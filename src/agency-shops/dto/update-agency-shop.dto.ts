@@ -3,7 +3,7 @@ import {
   IsString,
 } from "class-validator";
 
-export class CreateAgencyShopDto {
+export class UpdateAgencyShopDto {
   @IsString()
   @IsNotEmpty()
   shopName!: string;
