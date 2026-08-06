@@ -74,6 +74,8 @@ export class ProductsService {
   // ==========================================
 
 async findMine(userId: string) {
+  console.log("======== FIND MINE ========");
+  console.log(userId);
   const agency =
     await db.query.agencies.findFirst({
       where: eq(
