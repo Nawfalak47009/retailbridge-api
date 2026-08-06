@@ -47,12 +47,26 @@ export class ProductsController {
   // PUBLIC
   // =====================================
 
-  @Get()
-  findAll() {
-    return this.productsService.findAll();
-  }
+  // =====================================
+// PRODUCTS FOR SHOP
+// =====================================
 
- @Get("agency/:agencyId")
+@Get()
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
+@Roles("SHOP")
+findAll(
+  @CurrentUser()
+  user: JwtUser,
+) {
+  return this.productsService.findAll(
+    user.id,
+  );
+}
+
+@Get("agency/:agencyId")
 @UseGuards(
   JwtAuthGuard,
   RolesGuard,
@@ -70,7 +84,6 @@ findByAgency(
     agencyId,
   );
 }
-
   @Get(":id")
   findOne(
     @Param("id")

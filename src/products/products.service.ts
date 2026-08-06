@@ -97,46 +97,90 @@ export class ProductsService {
   }
 
   // ==========================================
-  // ALL PRODUCTS
-  // ==========================================
+// ALL PRODUCTS
+// ==========================================
 
-  async findAll() {
-  const data = await db.query.products.findMany();
+async findAll(
+  userId: string,
+) {
+  let assignedAgencyId: string | null =
+    null;
+
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
+
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
+  }
+
+  if (
+    shop.registrationType ===
+    "AGENCY_CREATED"
+  ) {
+    assignedAgencyId =
+      shop.agencyId;
+  }
+
+  const allProducts =
+    await db.query.products.findMany();
+
+  const filteredProducts =
+    assignedAgencyId
+      ? allProducts.filter(
+          (product) =>
+            product.agencyId ===
+            assignedAgencyId,
+        )
+      : allProducts;
 
   return Promise.all(
-    data.map(async (product) => {
-      let key = product.image;
+    filteredProducts.map(
+      async (product) => {
+        let key =
+          product.image;
 
-      if (key.startsWith("http")) {
-        key = key
-          .split("?")[0]
-          .split("/")
-          .pop()!;
-      }
+        if (
+          key.startsWith("http")
+        ) {
+          key = key
+            .split("?")[0]
+            .split("/")
+            .pop()!;
+        }
 
-      const agency =
-        await db.query.agencies.findFirst({
-          where: eq(
-            agencies.id,
-            product.agencyId,
-          ),
-        });
+        const agency =
+          await db.query.agencies.findFirst({
+            where: eq(
+              agencies.id,
+              product.agencyId,
+            ),
+          });
 
-      return {
-        ...product,
+        return {
+          ...product,
 
-        agencyName:
-          agency?.agencyName ?? "",
+          agencyName:
+            agency?.agencyName ??
+            "",
 
-        ownerName:
-          agency?.ownerName ?? "",
+          ownerName:
+            agency?.ownerName ??
+            "",
 
-        image:
-          await this.s3Service.getSignedImageUrl(
-            key,
-          ),
-      };
-    }),
+          image:
+            await this.s3Service.getSignedImageUrl(
+              key,
+            ),
+        };
+      },
+    ),
   );
 }
 
