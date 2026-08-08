@@ -1,7 +1,6 @@
 import {
   IsInt,
   IsNotEmpty,
-  IsString,
   IsUUID,
   Min,
 } from "class-validator";
@@ -15,15 +14,12 @@ export class CreateDeliverySlotDto {
   @IsNotEmpty()
   shopId!: string;
 
-  @IsString()
   @IsNotEmpty()
   day!: string;
 
-  @IsString()
   @IsNotEmpty()
   startTime!: string;
 
-  @IsString()
   @IsNotEmpty()
   endTime!: string;
 

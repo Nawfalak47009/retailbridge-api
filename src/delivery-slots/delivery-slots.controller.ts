@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  Patch,
   Post,
   Req,
   UseGuards,
@@ -47,7 +46,7 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // AGENCY → MY SLOTS
+  // AGENCY → ALL MY SLOTS
   // ==========================================
 
   @Get("agency/:agencyId")
@@ -65,12 +64,10 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // AGENCY → SLOTS FOR ONE CONNECTED SHOP
+  // AGENCY → ONE CONNECTED SHOP'S SLOTS
   // ==========================================
 
-  @Get(
-    "agency/:agencyId/shop/:shopId",
-  )
+  @Get("agency/:agencyId/shop/:shopId")
   findByAgencyShop(
     @Param("agencyId")
     agencyId: string,
@@ -87,8 +84,6 @@ export class DeliverySlotsController {
       req.user,
     );
   }
-
-  
 
   // ==========================================
   // SHOP → ITS DELIVERY SLOTS

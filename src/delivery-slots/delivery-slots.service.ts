@@ -40,6 +40,10 @@ export class DeliverySlotsService {
       );
     }
 
+    // ------------------------------------------
+    // Verify agency
+    // ------------------------------------------
+
     const agency =
       await db.query.agencies.findFirst({
         where: eq(
@@ -60,12 +64,44 @@ export class DeliverySlotsService {
       );
     }
 
+    // ------------------------------------------
+    // Verify shop is connected
+    // ------------------------------------------
+
+    const connection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(
+            agencyShopConnections.agencyId,
+            dto.agencyId,
+          ),
+          eq(
+            agencyShopConnections.shopId,
+            dto.shopId,
+          ),
+        ),
+      });
+
+    if (!connection) {
+      throw new ForbiddenException(
+        "This shop is not connected to your agency.",
+      );
+    }
+
+    // ------------------------------------------
+    // Check duplicate slot
+    // ------------------------------------------
+
     const existingSlot =
       await db.query.deliverySlots.findFirst({
         where: and(
           eq(
             deliverySlots.agencyId,
             dto.agencyId,
+          ),
+          eq(
+            deliverySlots.shopId,
+            dto.shopId,
           ),
           eq(
             deliverySlots.day,
@@ -84,23 +120,27 @@ export class DeliverySlotsService {
 
     if (existingSlot) {
       throw new BadRequestException(
-        "This delivery slot already exists.",
+        "This delivery slot already exists for this shop.",
       );
     }
 
+    // ------------------------------------------
+    // Create slot
+    // ------------------------------------------
+
     const [slot] =
-  await db
-    .insert(deliverySlots)
-    .values({
-      agencyId: dto.agencyId,
-      shopId: dto.shopId,
-      day: dto.day,
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      maxOrders: dto.maxOrders,
-      isActive: "true",
-    })
-    .returning();
+      await db
+        .insert(deliverySlots)
+        .values({
+          agencyId: dto.agencyId,
+          shopId: dto.shopId,
+          day: dto.day,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          maxOrders: dto.maxOrders,
+          isActive: "true",
+        })
+        .returning();
 
     return {
       success: true,
@@ -110,9 +150,8 @@ export class DeliverySlotsService {
     };
   }
 
-
   // ==========================================
-  // AGENCY → MY SLOTS
+  // AGENCY → ALL MY SLOTS
   // ==========================================
 
   async findByAgency(
@@ -153,6 +192,86 @@ export class DeliverySlotsService {
       );
   }
 
+  // ==========================================
+  // AGENCY → SLOTS FOR ONE CONNECTED SHOP
+  // ==========================================
+
+  async findByAgencyShop(
+    agencyId: string,
+    shopId: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can access agency slots.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify agency
+    // ------------------------------------------
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          agencyId,
+        ),
+      });
+
+    if (
+      !agency ||
+      agency.userId !== user.id
+    ) {
+      throw new ForbiddenException(
+        "You can only access your own agency slots.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify shop connection
+    // ------------------------------------------
+
+    const connection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(
+            agencyShopConnections.agencyId,
+            agencyId,
+          ),
+          eq(
+            agencyShopConnections.shopId,
+            shopId,
+          ),
+        ),
+      });
+
+    if (!connection) {
+      throw new ForbiddenException(
+        "This shop is not connected to your agency.",
+      );
+    }
+
+    // ------------------------------------------
+    // Return slots
+    // ------------------------------------------
+
+    return db
+      .select()
+      .from(deliverySlots)
+      .where(
+        and(
+          eq(
+            deliverySlots.agencyId,
+            agencyId,
+          ),
+          eq(
+            deliverySlots.shopId,
+            shopId,
+          ),
+        ),
+      );
+  }
 
   // ==========================================
   // SHOP → CONNECTED AGENCY SLOTS
@@ -167,6 +286,10 @@ export class DeliverySlotsService {
         "Only shops can access shop slots.",
       );
     }
+
+    // ------------------------------------------
+    // Get connected agencies
+    // ------------------------------------------
 
     const connections =
       await db
@@ -192,6 +315,10 @@ export class DeliverySlotsService {
       return [];
     }
 
+    // ------------------------------------------
+    // Return active slots
+    // ------------------------------------------
+
     return db
       .select()
       .from(deliverySlots)
@@ -202,13 +329,16 @@ export class DeliverySlotsService {
             agencyIds,
           ),
           eq(
+            deliverySlots.shopId,
+            shopId,
+          ),
+          eq(
             deliverySlots.isActive,
             "true",
           ),
         ),
       );
   }
-
 
   // ==========================================
   // DELETE SLOT
@@ -239,6 +369,10 @@ export class DeliverySlotsService {
       );
     }
 
+    // ------------------------------------------
+    // Verify agency ownership
+    // ------------------------------------------
+
     const agency =
       await db.query.agencies.findFirst({
         where: eq(
@@ -256,6 +390,10 @@ export class DeliverySlotsService {
       );
     }
 
+    // ------------------------------------------
+    // Delete
+    // ------------------------------------------
+
     await db
       .delete(deliverySlots)
       .where(
@@ -271,78 +409,4 @@ export class DeliverySlotsService {
         "Delivery slot deleted successfully.",
     };
   }
-
-  // ==========================================
-// AGENCY → SLOTS FOR ONE CONNECTED SHOP
-// ==========================================
-
-async findByAgencyShop(
-  agencyId: string,
-  shopId: string,
-  user: any,
-) {
-  if (user.role !== "AGENCY") {
-    throw new ForbiddenException(
-      "Only agencies can access agency slots.",
-    );
-  }
-
-  // Verify agency belongs to logged-in user
-  const agency =
-    await db.query.agencies.findFirst({
-      where: eq(
-        agencies.id,
-        agencyId,
-      ),
-    });
-
-  if (
-    !agency ||
-    agency.userId !== user.id
-  ) {
-    throw new ForbiddenException(
-      "You can only access your own agency slots.",
-    );
-  }
-
-  // Verify that this shop is connected
-  // to this agency
-  const connection =
-    await db.query.agencyShopConnections.findFirst({
-      where: and(
-        eq(
-          agencyShopConnections.agencyId,
-          agencyId,
-        ),
-        eq(
-          agencyShopConnections.shopId,
-          shopId,
-        ),
-      ),
-    });
-
-  if (!connection) {
-    throw new ForbiddenException(
-      "This shop is not connected to your agency.",
-    );
-  }
-
-  // Return slots for this agency + shop
-  return db
-    .select()
-    .from(deliverySlots)
-    .where(
-      and(
-        eq(
-          deliverySlots.agencyId,
-          agencyId,
-        ),
-        eq(
-          deliverySlots.shopId,
-          shopId,
-        ),
-      ),
-    );
 }
-}
-
