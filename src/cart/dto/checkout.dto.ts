@@ -1,7 +1,19 @@
 import {
+  IsArray,
   IsOptional,
   IsString,
+  ValidateNested,
 } from "class-validator";
+
+import { Type } from "class-transformer";
+
+export class CheckoutAgencyDto {
+  @IsString()
+  agencyId!: string;
+
+  @IsString()
+  slotId!: string;
+}
 
 export class CheckoutDto {
   @IsString()
@@ -13,4 +25,9 @@ export class CheckoutDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CheckoutAgencyDto)
+  orders!: CheckoutAgencyDto[];
 }

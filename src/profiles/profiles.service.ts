@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+
 import { eq } from "drizzle-orm";
 
 import { db } from "../db";
+
 import {
   agencies,
   shops,
@@ -17,6 +19,7 @@ import { CreateShopProfileDto } from "./dto/create-shop-profile.dto";
 
 @Injectable()
 export class ProfilesService {
+
   // =====================================
   // AGENCY PROFILE
   // =====================================
@@ -39,15 +42,14 @@ export class ProfilesService {
       );
     }
 
-  const profileData = dto;
-
-const [profile] = await db
-  .insert(agencyProfiles)
-  .values({
-    agencyId: agency.id,
-    ...profileData,
-  })
-  .returning();
+    const [profile] =
+      await db
+        .insert(agencyProfiles)
+        .values({
+          agencyId: agency.id,
+          ...dto,
+        })
+        .returning();
 
     return {
       success: true,
@@ -56,6 +58,10 @@ const [profile] = await db
       profile,
     };
   }
+
+  // =====================================
+  // GET AGENCY PROFILE
+  // =====================================
 
   async getAgencyProfile(
     userId: string,
@@ -84,22 +90,36 @@ const [profile] = await db
 
     return {
       id: agency.id,
-      agencyId: agency.id,
 
-      agencyName: agency.agencyName,
-      ownerName: agency.ownerName,
-      phone: agency.phone,
+      agencyId:
+        agency.id,
+
+      agencyName:
+        agency.agencyName,
+
+      ownerName:
+        agency.ownerName,
+
+      phone:
+        agency.phone,
 
       address:
         profile?.address ?? "",
+
       logo:
         profile?.logo ?? "",
+
       description:
         profile?.description ?? "",
+
       gst:
         profile?.gst ?? "",
     };
   }
+
+  // =====================================
+  // UPDATE AGENCY PROFILE
+  // =====================================
 
   async updateAgencyProfile(
     userId: string,
@@ -148,8 +168,10 @@ const [profile] = await db
 
     return {
       success: true,
+
       message:
         "Agency profile updated successfully.",
+
       profile,
     };
   }
@@ -176,23 +198,28 @@ const [profile] = await db
       );
     }
 
-  const profileData = dto;
-
-const [profile] = await db
-  .insert(shopProfiles)
-  .values({
-    shopId: shop.id,
-    ...profileData,
-  })
-  .returning();
+    const [profile] =
+      await db
+        .insert(shopProfiles)
+        .values({
+          shopId: shop.id,
+          ...dto,
+        })
+        .returning();
 
     return {
       success: true,
+
       message:
         "Shop profile created successfully.",
+
       profile,
     };
   }
+
+  // =====================================
+  // GET SHOP PROFILE
+  // =====================================
 
   async getShopProfile(
     userId: string,
@@ -219,31 +246,37 @@ const [profile] = await db
         ),
       });
 
-   return {
-  id: shop.id,
-  shopId: shop.id,
+    return {
+      id: shop.id,
 
-  shopName: shop.shopName,
-  ownerName: shop.ownerName,
-  phone: shop.phone,
+      shopId:
+        shop.id,
 
-  address:
-    profile?.address ??
-    shop.address,
+      shopName:
+        shop.shopName,
 
-  pincode: shop.pincode,
+      ownerName:
+        shop.ownerName,
 
-  deliveryDay:
-    shop.deliveryDay,
+      phone:
+        shop.phone,
 
-  deliverySlot:
-    shop.deliverySlot,
+      address:
+        profile?.address ??
+        shop.address,
 
-  deliveryNotes:
-    profile?.deliveryNotes ??
-    "",
-};
+      pincode:
+        shop.pincode,
+
+      deliveryNotes:
+        profile?.deliveryNotes ??
+        "",
+    };
   }
+
+  // =====================================
+  // UPDATE SHOP PROFILE
+  // =====================================
 
   async updateShopProfile(
     userId: string,
@@ -292,8 +325,10 @@ const [profile] = await db
 
     return {
       success: true,
+
       message:
         "Shop profile updated successfully.",
+
       profile,
     };
   }

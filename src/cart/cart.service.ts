@@ -1,9 +1,15 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
 } from "@nestjs/common";
 
-import { eq, and } from "drizzle-orm";
+import {
+  eq,
+  and,
+  count,
+} from "drizzle-orm";
 import { S3Service } from "../documents/s3.service";
 
 import { db } from "../db";
@@ -14,16 +20,109 @@ import {
   products,
   shops,
   agencies,
-} from "../db/schema";
-
-import {
   orders,
   orderItems,
+  agencyShopConnections,
+  deliverySlots,
 } from "../db/schema";
 
 import { CheckoutDto } from "./dto/checkout.dto";
 
 import { AddCartDto } from "./dto/add-cart.dto";
+
+function getNextDayDate(
+  dayName: string,
+): Date {
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const targetDay =
+    days.findIndex(
+      (day) =>
+        day.toLowerCase() ===
+        dayName.toLowerCase(),
+    );
+
+  if (targetDay === -1) {
+    throw new BadRequestException(
+      `Invalid delivery day: ${dayName}`,
+    );
+  }
+
+  const now = new Date();
+  const result = new Date(now);
+
+  const currentDay =
+    result.getDay();
+
+  let difference =
+    targetDay - currentDay;
+
+  if (difference < 0) {
+    difference += 7;
+  }
+
+  result.setDate(
+    result.getDate() + difference,
+  );
+
+  return result;
+}
+
+function setSlotTime(
+  date: Date,
+  time: string,
+): Date {
+  const result = new Date(date);
+
+  const parts =
+    time.trim().split(" ");
+
+  const timePart = parts[0];
+  const modifier =
+    parts[1]?.toUpperCase();
+
+  const [
+    hoursString,
+    minutesString,
+  ] = timePart.split(":");
+
+  let hours =
+    Number(hoursString);
+
+  const minutes =
+    Number(minutesString || 0);
+
+  if (
+    modifier === "PM" &&
+    hours < 12
+  ) {
+    hours += 12;
+  }
+
+  if (
+    modifier === "AM" &&
+    hours === 12
+  ) {
+    hours = 0;
+  }
+
+  result.setHours(
+    hours,
+    minutes,
+    0,
+    0,
+  );
+
+  return result;
+}
 
 @Injectable()
 export class CartService {
@@ -65,6 +164,30 @@ export class CartService {
         "Product not found.",
       );
     }
+
+    // =====================================
+// CHECK SHOP ↔ AGENCY CONNECTION
+// =====================================
+
+const connection =
+  await db.query.agencyShopConnections.findFirst({
+    where: and(
+      eq(
+        agencyShopConnections.agencyId,
+        product.agencyId,
+      ),
+      eq(
+        agencyShopConnections.shopId,
+        shop.id,
+      ),
+    ),
+  });
+
+if (!connection) {
+  throw new UnauthorizedException(
+    "Your shop is not connected to this agency.",
+  );
+}
 
     // Find existing cart
 let cart =
@@ -427,7 +550,10 @@ async checkout(
   userId: string,
   dto: CheckoutDto,
 ) {
-  // Find logged-in shop
+  // ==========================================
+  // FIND LOGGED-IN SHOP
+  // ==========================================
+
   const shop =
     await db.query.shops.findFirst({
       where: eq(
@@ -442,20 +568,29 @@ async checkout(
     );
   }
 
-  await db
-  .update(shops)
-  .set({
-    address: dto.deliveryAddress,
-    pincode: dto.deliveryPincode,
-  })
-  .where(
-    eq(
-      shops.id,
-      shop.id,
-    ),
-  );
+  // ==========================================
+  // UPDATE SHOP ADDRESS
+  // ==========================================
 
-  // Find carts
+  await db
+    .update(shops)
+    .set({
+      address:
+        dto.deliveryAddress,
+      pincode:
+        dto.deliveryPincode,
+    })
+    .where(
+      eq(
+        shops.id,
+        shop.id,
+      ),
+    );
+
+  // ==========================================
+  // FIND CARTS
+  // ==========================================
+
   const userCarts =
     await db.query.carts.findMany({
       where: eq(
@@ -470,64 +605,285 @@ async checkout(
     );
   }
 
- const createdOrders: typeof orders.$inferSelect[] = [];
+  // ==========================================
+  // CHECK SLOT SELECTIONS
+  // ==========================================
 
-  for (const cart of userCarts) {
-    // Create Order
-    // Get Cart Items
-const items =
-  await db.query.cartItems.findMany({
-    where: eq(
-      cartItems.cartId,
-      cart.id,
-    ),
-  });
-
-// Calculate Total
-let totalAmount = 0;
-
-for (const item of items) {
-  const product =
-    await db.query.products.findFirst({
-      where: eq(
-        products.id,
-        item.productId,
-      ),
-    });
-
-  if (product) {
-    totalAmount +=
-      Number(product.price) *
-      Number(item.quantity);
+  if (
+    !dto.orders ||
+    dto.orders.length === 0
+  ) {
+    throw new BadRequestException(
+      "Please select a delivery slot for each agency.",
+    );
   }
-}
 
-// Create Order
-const [order] =
-  await db
-    .insert(orders)
-    .values({
-      shopId: shop.id,
-      agencyId: cart.agencyId,
-      remarks:
-        dto.remarks ?? "",
-    })
-    .returning();
+  // ==========================================
+  // MAKE QUICK LOOKUP
+  // ==========================================
 
-// Save Order Items
-for (const item of items) {
-  await db
-    .insert(orderItems)
-    .values({
-      orderId: order.id,
-      productId: item.productId,
-      cases: String(
-        item.quantity,
+  const selectedSlots =
+    new Map(
+      dto.orders.map(
+        (item) => [
+          item.agencyId,
+          item.slotId,
+        ],
       ),
-    });
-}
+    );
 
-    // Delete cart items
+  const createdOrders:
+    typeof orders.$inferSelect[] = [];
+
+  // ==========================================
+  // PROCESS EACH AGENCY CART
+  // ==========================================
+
+  for (
+    const cart of userCarts
+  ) {
+    // ========================================
+    // FIND SELECTED SLOT
+    // ========================================
+
+    const slotId =
+      selectedSlots.get(
+        cart.agencyId,
+      );
+
+    if (!slotId) {
+      throw new BadRequestException(
+        `Please select a delivery slot for agency ${cart.agencyId}.`,
+      );
+    }
+
+    // ========================================
+    // FIND AGENCY
+    // ========================================
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          cart.agencyId,
+        ),
+      });
+
+    if (!agency) {
+      throw new NotFoundException(
+        "Agency not found.",
+      );
+    }
+
+    // ========================================
+    // CHECK SHOP ↔ AGENCY CONNECTION
+    // ========================================
+
+    const connection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(
+            agencyShopConnections.agencyId,
+            agency.id,
+          ),
+          eq(
+            agencyShopConnections.shopId,
+            shop.id,
+          ),
+        ),
+      });
+
+    if (!connection) {
+      throw new UnauthorizedException(
+        `Your shop is not connected to ${agency.agencyName}.`,
+      );
+    }
+
+    // ========================================
+    // FIND DELIVERY SLOT
+    // ========================================
+
+    const slot =
+      await db.query.deliverySlots.findFirst({
+        where: and(
+          eq(
+            deliverySlots.id,
+            slotId,
+          ),
+          eq(
+            deliverySlots.agencyId,
+            agency.id,
+          ),
+          eq(
+            deliverySlots.isActive,
+            "true",
+          ),
+        ),
+      });
+
+    if (!slot) {
+      throw new NotFoundException(
+        "Selected delivery slot is not available.",
+      );
+    }
+
+    // ========================================
+    // CHECK SLOT CAPACITY
+    // ========================================
+
+    const bookedResult =
+      await db
+        .select({
+          count: count(),
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(
+              orders.slotId,
+              slot.id,
+            ),
+            eq(
+              orders.agencyId,
+              agency.id,
+            ),
+          ),
+        );
+
+    const bookedOrders =
+      Number(
+        bookedResult[0]?.count ??
+          0,
+      );
+
+    if (
+      bookedOrders >=
+      slot.maxOrders
+    ) {
+      throw new BadRequestException(
+        `${slot.day} ${slot.startTime} - ${slot.endTime} is fully booked.`,
+      );
+    }
+
+    // ========================================
+    // CALCULATE DELIVERY DATE
+    // ========================================
+
+    const deliveryDate =
+      getNextDayDate(
+        slot.day,
+      );
+
+    const scheduledDate =
+      setSlotTime(
+        deliveryDate,
+        slot.startTime,
+      );
+
+    // ========================================
+    // GET CART ITEMS
+    // ========================================
+
+    const items =
+      await db.query.cartItems.findMany({
+        where: eq(
+          cartItems.cartId,
+          cart.id,
+        ),
+      });
+
+    if (items.length === 0) {
+      continue;
+    }
+
+    // ========================================
+    // CALCULATE TOTAL
+    // ========================================
+
+    let totalAmount = 0;
+
+    for (
+      const item of items
+    ) {
+      const product =
+        await db.query.products.findFirst({
+          where: eq(
+            products.id,
+            item.productId,
+          ),
+        });
+
+      if (!product) {
+        throw new NotFoundException(
+          `Product ${item.productId} not found.`,
+        );
+      }
+
+      totalAmount +=
+        Number(product.price) *
+        Number(item.quantity);
+    }
+
+    // ========================================
+    // CREATE ORDER
+    // ========================================
+
+    const [order] =
+      await db
+        .insert(orders)
+        .values({
+          shopId:
+            shop.id,
+
+          agencyId:
+            agency.id,
+
+          slotId:
+            slot.id,
+
+          totalAmount,
+
+          deliveryAddress:
+            dto.deliveryAddress,
+
+          deliveryPincode:
+            dto.deliveryPincode,
+
+          scheduledDate,
+
+          remarks:
+            dto.remarks ??
+            "",
+        })
+        .returning();
+
+    // ========================================
+    // CREATE ORDER ITEMS
+    // ========================================
+
+    for (
+      const item of items
+    ) {
+      await db
+        .insert(orderItems)
+        .values({
+          orderId:
+            order.id,
+
+          productId:
+            item.productId,
+
+          cases:
+            String(
+              item.quantity,
+            ),
+        });
+    }
+
+    // ========================================
+    // CLEAR THIS AGENCY CART
+    // ========================================
+
     await db
       .delete(cartItems)
       .where(
@@ -537,7 +893,6 @@ for (const item of items) {
         ),
       );
 
-    // Delete cart
     await db
       .delete(carts)
       .where(
@@ -547,14 +902,33 @@ for (const item of items) {
         ),
       );
 
-    createdOrders.push(order);
+    createdOrders.push(
+      order,
+    );
   }
+
+  // ==========================================
+  // RESPONSE
+  // ==========================================
 
   return {
     success: true,
+
     message:
       "Order placed successfully.",
-    orders: createdOrders,
+
+    orders:
+      createdOrders.map(
+        (order) => ({
+          ...order,
+
+          scheduledDate:
+            order.scheduledDate,
+
+          slotId:
+            order.slotId,
+        }),
+      ),
   };
 }
 

@@ -2,18 +2,22 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+
 import { eq } from "drizzle-orm";
 
 import { db } from "../db";
+
 import {
   shops,
   agencies,
   orders,
   orderItems,
   products,
+  agencyShopConnections,
 } from "../db/schema";
 
 import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
+
 import { S3Service } from "../documents/s3.service";
 
 @Injectable()
@@ -21,6 +25,7 @@ export class ShopsService {
   constructor(
     private readonly s3Service: S3Service,
   ) {}
+
   // =====================================
   // Submit Documents
   // =====================================
@@ -45,6 +50,7 @@ export class ShopsService {
     return {
       id,
       status: "PENDING",
+
       documents: {
         aadhaar: true,
         shopPhoto: true,
@@ -52,123 +58,128 @@ export class ShopsService {
     };
   }
 
-// =====================================
-// Shop Profile
-// =====================================
+  // =====================================
+  // Shop Profile
+  // =====================================
 
-async profile(userId: string) {
-  const shop =
-    await db.query.shops.findFirst({
-      where: eq(
-        shops.userId,
-        userId,
-      ),
-    });
+  async profile(
+    userId: string,
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
 
-  if (!shop) {
-    throw new NotFoundException(
-      "Shop not found.",
-    );
-  }
+    if (!shop) {
+      throw new NotFoundException(
+        "Shop not found.",
+      );
+    }
 
- const connectedAgency =
-  await db.query.agencies.findFirst({
-    where: eq(
-      agencies.id,
-      shop.agencyId,
-    ),
-  });
+    // ===================================
+    // CONNECTED AGENCIES
+    // ===================================
 
-const allAgencies =
-  await db.query.agencies.findMany();
-
-  const shopOrders =
-    await db.query.orders.findMany({
-      where: eq(
-        orders.shopId,
-        shop.id,
-      ),
-    });
-
-  return {
-    success: true,
-
-    shop,
-
-   stats: {
-  totalAgencies:
-    allAgencies.length,
-
-  connectedAgencies:
-    connectedAgency ? 1 : 0,
-
-  totalOrders:
-    shopOrders.length,
-
-  pendingOrders:
-    shopOrders.filter(
-      (order) =>
-        order.status ===
-        "PENDING",
-    ).length,
-
-  deliveredOrders:
-    shopOrders.filter(
-      (order) =>
-        order.status ===
-        "DELIVERED",
-    ).length,
-},
-  };
-}
-// =====================================
-// Update Address
-// =====================================
-
-async updateAddress(
-  userId: string,
-  body: {
-    address: string;
-    pincode: string;
-  },
-) {
-  const shop =
-
-    await db.query.shops.findFirst({
-      where: eq(
-        shops.userId,
-        userId,
-      ),
-    });
-
-  if (!shop) {
-    throw new NotFoundException(
-      "Shop not found.",
-    );
-  }
-
-  const [updated] =
-    await db
-      .update(shops)
-      .set({
-  address: body.address,
-  pincode: body.pincode,
-})
-      .where(
-        eq(
-          shops.id,
+    const connections =
+      await db.query.agencyShopConnections.findMany({
+        where: eq(
+          agencyShopConnections.shopId,
           shop.id,
         ),
-      )
-      .returning();
+      });
 
-  return {
-    success: true,
-    message:
-      "Address updated successfully.",
-    shop: updated,
-  };
-}
+    const shopOrders =
+      await db.query.orders.findMany({
+        where: eq(
+          orders.shopId,
+          shop.id,
+        ),
+      });
+
+    return {
+      success: true,
+
+      shop,
+
+      stats: {
+        connectedAgencies:
+          connections.length,
+
+        totalOrders:
+          shopOrders.length,
+
+        pendingOrders:
+          shopOrders.filter(
+            (order) =>
+              order.status ===
+              "PENDING",
+          ).length,
+
+        deliveredOrders:
+          shopOrders.filter(
+            (order) =>
+              order.status ===
+              "DELIVERED",
+          ).length,
+      },
+    };
+  }
+
+  // =====================================
+  // Update Address
+  // =====================================
+
+  async updateAddress(
+    userId: string,
+    body: {
+      address: string;
+      pincode: string;
+    },
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
+        where: eq(
+          shops.userId,
+          userId,
+        ),
+      });
+
+    if (!shop) {
+      throw new NotFoundException(
+        "Shop not found.",
+      );
+    }
+
+    const [updated] =
+      await db
+        .update(shops)
+        .set({
+          address:
+            body.address,
+
+          pincode:
+            body.pincode,
+        })
+        .where(
+          eq(
+            shops.id,
+            shop.id,
+          ),
+        )
+        .returning();
+
+    return {
+      success: true,
+
+      message:
+        "Address updated successfully.",
+
+      shop: updated,
+    };
+  }
 
   // =====================================
   // Dashboard (JWT)
@@ -191,16 +202,21 @@ async updateAddress(
       );
     }
 
-  const connectedAgency =
-  await db.query.agencies.findFirst({
-    where: eq(
-      agencies.id,
-      shop.agencyId,
-    ),
-  });
+    // ===================================
+    // CONNECTED AGENCIES
+    // ===================================
 
-const allAgencies =
-  await db.query.agencies.findMany();
+    const connections =
+      await db.query.agencyShopConnections.findMany({
+        where: eq(
+          agencyShopConnections.shopId,
+          shop.id,
+        ),
+      });
+
+    // ===================================
+    // ORDERS
+    // ===================================
 
     const shopOrders =
       await db.query.orders.findMany({
@@ -208,6 +224,7 @@ const allAgencies =
           orders.shopId,
           shop.id,
         ),
+
         orderBy: (
           orders,
           { desc },
@@ -224,29 +241,26 @@ const allAgencies =
       shop,
 
       stats: {
-  totalAgencies:
-    allAgencies.length,
+        connectedAgencies:
+          connections.length,
 
-  connectedAgencies:
-    connectedAgency ? 1 : 0,
+        totalOrders:
+          shopOrders.length,
 
-  totalOrders:
-    shopOrders.length,
+        pendingOrders:
+          shopOrders.filter(
+            (order) =>
+              order.status ===
+              "PENDING",
+          ).length,
 
-  pendingOrders:
-    shopOrders.filter(
-      (order) =>
-        order.status ===
-        "PENDING",
-    ).length,
-
-  deliveredOrders:
-    shopOrders.filter(
-      (order) =>
-        order.status ===
-        "DELIVERED",
-    ).length,
-},
+        deliveredOrders:
+          shopOrders.filter(
+            (order) =>
+              order.status ===
+              "DELIVERED",
+          ).length,
+      },
 
       recentOrders:
         shopOrders.slice(
@@ -256,149 +270,164 @@ const allAgencies =
     };
   }
 
+  // =====================================
+  // FREQUENTLY BOUGHT
+  // =====================================
+
   async frequentlyBought(
-  userId: string,
-) {
-  const shop =
-    await db.query.shops.findFirst({
-      where: eq(
-        shops.userId,
-        userId,
-      ),
-    });
-
-  if (!shop) {
-    throw new NotFoundException(
-      "Shop not found.",
-    );
-  }
-
-  const shopOrders =
-    await db.query.orders.findMany({
-      where: eq(
-        orders.shopId,
-        shop.id,
-      ),
-    });
-
-  const frequency = new Map<
-    string,
-    {
-      orderedCount: number;
-      lastOrdered: Date;
-    }
-  >();
-
-  for (const order of shopOrders) {
-    const items =
-      await db.query.orderItems.findMany({
+    userId: string,
+  ) {
+    const shop =
+      await db.query.shops.findFirst({
         where: eq(
-          orderItems.orderId,
-          order.id,
+          shops.userId,
+          userId,
         ),
       });
 
-    for (const item of items) {
-      const existing =
-        frequency.get(
-          item.productId,
-        );
+    if (!shop) {
+      throw new NotFoundException(
+        "Shop not found.",
+      );
+    }
 
-      if (existing) {
-        existing.orderedCount +=
-          Number(item.cases);
+    const shopOrders =
+      await db.query.orders.findMany({
+        where: eq(
+          orders.shopId,
+          shop.id,
+        ),
+      });
 
-        if (
-          order.createdAt >
-          existing.lastOrdered
-        ) {
-          existing.lastOrdered =
-            order.createdAt;
+    const frequency =
+      new Map<
+        string,
+        {
+          orderedCount: number;
+          lastOrdered: Date;
         }
-      } else {
-        frequency.set(
-          item.productId,
-          {
-            orderedCount:
-              Number(
-                item.cases,
-              ),
-            lastOrdered:
-              order.createdAt,
-          },
-        );
+      >();
+
+    for (
+      const order of shopOrders
+    ) {
+      const items =
+        await db.query.orderItems.findMany({
+          where: eq(
+            orderItems.orderId,
+            order.id,
+          ),
+        });
+
+      for (
+        const item of items
+      ) {
+        const existing =
+          frequency.get(
+            item.productId,
+          );
+
+        if (existing) {
+          existing.orderedCount +=
+            Number(
+              item.cases,
+            );
+
+          if (
+            order.createdAt >
+            existing.lastOrdered
+          ) {
+            existing.lastOrdered =
+              order.createdAt;
+          }
+        } else {
+          frequency.set(
+            item.productId,
+            {
+              orderedCount:
+                Number(
+                  item.cases,
+                ),
+
+              lastOrdered:
+                order.createdAt,
+            },
+          );
+        }
       }
     }
-  }
 
-  const result: any[] = [];
+    const result: any[] = [];
 
-  for (const [
-    productId,
-    stats,
-  ] of frequency.entries()) {
-    const product =
-      await db.query.products.findFirst({
-        where: eq(
-          products.id,
-          productId,
-        ),
-      });
-
-    if (!product) continue;
-
-    let key =
-      product.image;
-
-    if (
-      key.startsWith(
-        "http",
-      )
+    for (
+      const [
+        productId,
+        stats,
+      ] of frequency.entries()
     ) {
-      key = key
-        .split("?")[0]
-        .split("/")
-        .pop()!;
+      const product =
+        await db.query.products.findFirst({
+          where: eq(
+            products.id,
+            productId,
+          ),
+        });
+
+      if (!product) {
+        continue;
+      }
+
+      let key =
+        product.image;
+
+      if (
+        key.startsWith("http")
+      ) {
+        key = key
+          .split("?")[0]
+          .split("/")
+          .pop()!;
+      }
+
+      result.push({
+        id: product.id,
+
+        name:
+          product.name,
+
+        image:
+          await this.s3Service.getSignedImageUrl(
+            key,
+          ),
+
+        unit:
+          product.unit,
+
+        quantityPerUnit:
+          product.quantityPerUnit,
+
+        price:
+          Number(
+            product.price,
+          ),
+
+        orderedCount:
+          stats.orderedCount,
+
+        lastOrdered:
+          stats.lastOrdered,
+      });
     }
 
-    result.push({
-      id: product.id,
+    result.sort(
+      (a, b) =>
+        b.orderedCount -
+        a.orderedCount,
+    );
 
-      name: product.name,
-
-      image:
-        await this.s3Service.getSignedImageUrl(
-          key,
-        ),
-
-      unit:
-        product.unit,
-
-      quantityPerUnit:
-        product.quantityPerUnit,
-
-      price: Number(
-        product.price,
-      ),
-
-      orderedCount:
-        stats.orderedCount,
-
-      lastOrdered:
-        stats.lastOrdered,
-    });
+    return result.slice(
+      0,
+      10,
+    );
   }
-
-  result.sort(
-    (a, b) =>
-      b.orderedCount -
-      a.orderedCount,
-  );
-
-  return result.slice(0, 10);
 }
-}
-
-
-
-

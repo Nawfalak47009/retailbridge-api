@@ -26,19 +26,14 @@ export class AgenciesController {
   // ALL APPROVED AGENCIES
   // ==========================================
 
-  @Get()
+@Get()
 @UseGuards(
   JwtAuthGuard,
   RolesGuard,
 )
 @Roles("SHOP")
-findAll(
-  @CurrentUser()
-  user: any,
-) {
-  return this.agenciesService.findAll(
-    user.id,
-  );
+findAll() {
+  return this.agenciesService.findAll();
 }
 
   // ==========================================

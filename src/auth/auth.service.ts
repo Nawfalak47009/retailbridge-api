@@ -101,72 +101,65 @@ async registerAgency(
   };
 }
 
-  // =========================
-  // REGISTER SHOP
-  // =========================
+ // =========================
+// REGISTER SHOP
+// =========================
 
-  async registerShop(
-    dto: RegisterShopDto,
-  ) {
-    const existingUser =
-      await db.query.users.findFirst({
-        where: eq(
-          users.email,
-          dto.email,
-        ),
-      });
+async registerShop(
+  dto: RegisterShopDto,
+) {
+  const existingUser =
+    await db.query.users.findFirst({
+      where: eq(
+        users.email,
+        dto.email,
+      ),
+    });
 
-    if (existingUser) {
-      throw new BadRequestException(
-        "Email already exists.",
-      );
-    }
-
-    const hashed =
-      await bcrypt.hash(
-        dto.password,
-        12,
-      );
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        email: dto.email,
-        password: hashed,
-        role: "SHOP",
-      })
-      .returning();
-
-   await db.insert(shops).values({
-  userId: user.id,
-
-  agencyId: "",
-
-  registrationType:
-    "SELF_REGISTERED",
-
-  shopName: dto.shopName,
-
-  ownerName: dto.ownerName,
-
-  phone: dto.phone,
-
-  address: dto.address,
-
-  pincode: dto.pincode,
-
-  deliveryDay: "",
-
-  deliverySlot: "",
-});
-
-    return {
-      success: true,
-      message:
-        "Shop registered successfully. Waiting for admin approval.",
-      id: user.id,
-    };
+  if (existingUser) {
+    throw new BadRequestException(
+      "Email already exists.",
+    );
   }
+
+  const hashed =
+    await bcrypt.hash(
+      dto.password,
+      12,
+    );
+
+  // Create User
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: dto.email,
+      password: hashed,
+      role: "SHOP",
+    })
+    .returning();
+
+  // Create independent Grocery Shop
+  await db.insert(shops).values({
+    userId: user.id,
+
+    shopName: dto.shopName,
+
+    ownerName: dto.ownerName,
+
+    phone: dto.phone,
+
+    address: dto.address,
+
+    pincode: dto.pincode,
+  });
+
+  return {
+    success: true,
+    message:
+      "Shop registered successfully. Waiting for admin approval.",
+    id: user.id,
+  };
+}
 
  // =========================
 // LOGIN

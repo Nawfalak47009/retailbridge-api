@@ -3,7 +3,11 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import {
+  eq,
+  and,
+  count,
+} from "drizzle-orm";
 
 import { db } from "../db";
 import {
@@ -13,6 +17,8 @@ import {
   orderItems,
   products,
   rewardTransactions,
+  agencyShopConnections,
+  deliverySlots,
 } from "../db/schema";
 
 import { S3Service } from "../documents/s3.service";
@@ -20,63 +26,339 @@ import { S3Service } from "../documents/s3.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 
+function getNextDayDate(dayName: string): Date {
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const targetDay = days.findIndex(
+    (day) =>
+      day.toLowerCase() ===
+      dayName.toLowerCase(),
+  );
+
+  if (targetDay === -1) {
+    throw new Error(
+      `Invalid delivery day: ${dayName}`,
+    );
+  }
+
+  const now = new Date();
+  const result = new Date(now);
+
+  const currentDay = now.getDay();
+
+  let difference =
+    targetDay - currentDay;
+
+  if (difference < 0) {
+    difference += 7;
+  }
+
+  result.setDate(
+    now.getDate() + difference,
+  );
+
+  return result;
+}
+
+function setSlotTime(
+  date: Date,
+  time: string,
+): Date {
+  const result = new Date(date);
+
+  const parts = time
+    .trim()
+    .split(" ");
+
+  const timePart = parts[0];
+  const modifier =
+    parts[1]?.toUpperCase();
+
+  const [
+    hoursString,
+    minutesString,
+  ] = timePart.split(":");
+
+  let hours = Number(hoursString);
+
+  const minutes =
+    Number(minutesString || 0);
+
+  if (
+    modifier === "PM" &&
+    hours < 12
+  ) {
+    hours += 12;
+  }
+
+  if (
+    modifier === "AM" &&
+    hours === 12
+  ) {
+    hours = 0;
+  }
+
+  result.setHours(
+    hours,
+    minutes,
+    0,
+    0,
+  );
+
+  return result;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly s3Service: S3Service,
   ) {}
-  // ===========================
-  // SHOP - CREATE ORDER
-  // ===========================
 
-  async create(
-    userId: string,
-    dto: CreateOrderDto,
-  ) {
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.userId,
-          userId,
-        ),
-      });
+  
+ // ===========================
+// SHOP - CREATE ORDER
+// ===========================
 
-    if (!shop) {
-      throw new NotFoundException(
-        "Shop not found.",
-      );
-    }
+async create(
+  userId: string,
+  dto: CreateOrderDto,
+) {
+  // ==========================================
+  // FIND SHOP FROM LOGGED-IN USER
+  // ==========================================
 
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.id,
-          dto.agencyId,
-        ),
-      });
+  const shop =
+    await db.query.shops.findFirst({
+      where: eq(
+        shops.userId,
+        userId,
+      ),
+    });
 
-    if (!agency) {
-      throw new NotFoundException(
-        "Agency not found.",
-      );
-    }
-
-    const [order] =
-      await db
-        .insert(orders)
-        .values({
-          shopId: shop.id,
-          agencyId: agency.id,
-          remarks: dto.remarks,
-        })
-        .returning();
-
-    return {
-      success: true,
-      message: "Order placed successfully.",
-      order,
-    };
+  if (!shop) {
+    throw new NotFoundException(
+      "Shop not found.",
+    );
   }
+
+  // ==========================================
+  // FIND AGENCY
+  // ==========================================
+
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        dto.agencyId,
+      ),
+    });
+
+  if (!agency) {
+    throw new NotFoundException(
+      "Agency not found.",
+    );
+  }
+
+  // ==========================================
+  // CHECK SHOP ↔ AGENCY CONNECTION
+  // ==========================================
+
+  const connection =
+    await db.query.agencyShopConnections.findFirst({
+      where: and(
+        eq(
+          agencyShopConnections.agencyId,
+          agency.id,
+        ),
+        eq(
+          agencyShopConnections.shopId,
+          shop.id,
+        ),
+      ),
+    });
+
+  if (!connection) {
+    throw new UnauthorizedException(
+      "Your shop is not connected to this agency.",
+    );
+  }
+// ==========================================
+// FIND NEXT AVAILABLE DELIVERY SLOT
+// ==========================================
+
+const availableSlots =
+  await db
+    .select()
+    .from(deliverySlots)
+    .where(
+      and(
+        eq(
+          deliverySlots.agencyId,
+          agency.id,
+        ),
+        eq(
+          deliverySlots.shopId,
+          shop.id,
+        ),
+        eq(
+          deliverySlots.isActive,
+          "true",
+        ),
+      ),
+    );
+
+if (availableSlots.length === 0) {
+  throw new NotFoundException(
+    "No delivery slots are available for this shop.",
+  );
+}
+
+// ==========================================
+// FIND EARLIEST AVAILABLE SLOT
+// ==========================================
+
+let selectedSlot:
+  (typeof availableSlots)[number] | null =
+  null;
+
+let selectedDeliveryDate:
+  Date | null = null;
+
+let selectedBookedOrders = 0;
+
+for (const candidate of availableSlots) {
+  let deliveryDate =
+    getNextDayDate(candidate.day);
+
+  let scheduledDate =
+    setSlotTime(
+      deliveryDate,
+      candidate.startTime,
+    );
+
+  // If today's slot has already started,
+  // use next week's occurrence.
+  if (
+    scheduledDate.getTime() <=
+    Date.now()
+  ) {
+    scheduledDate.setDate(
+      scheduledDate.getDate() + 7,
+    );
+  }
+
+  const bookedResult =
+    await db
+      .select({
+        count: count(),
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(
+            orders.slotId,
+            candidate.id,
+          ),
+          eq(
+            orders.agencyId,
+            agency.id,
+          ),
+        ),
+      );
+
+  const bookedOrders =
+    Number(
+      bookedResult[0]?.count ?? 0,
+    );
+
+  if (
+    bookedOrders >=
+    candidate.maxOrders
+  ) {
+    continue;
+  }
+
+  if (
+    !selectedDeliveryDate ||
+    scheduledDate <
+      selectedDeliveryDate
+  ) {
+    selectedSlot =
+      candidate;
+
+    selectedDeliveryDate =
+      scheduledDate;
+
+    selectedBookedOrders =
+      bookedOrders;
+  }
+}
+
+if (
+  !selectedSlot ||
+  !selectedDeliveryDate
+) {
+  throw new UnauthorizedException(
+    "All upcoming delivery slots are fully booked.",
+  );
+}
+
+  // ==========================================
+  // CREATE ORDER
+  // ==========================================
+
+ const [order] =
+  await db
+    .insert(orders)
+    .values({
+      shopId: shop.id,
+      agencyId: agency.id,
+      slotId: selectedSlot.id,
+      scheduledDate:
+        selectedDeliveryDate,
+      remarks: dto.remarks,
+    })
+    .returning();
+
+  return {
+    success: true,
+    message:
+      "Order placed successfully.",
+    order,
+    deliverySlot: {
+  id: selectedSlot.id,
+
+  day: selectedSlot.day,
+
+  startTime:
+    selectedSlot.startTime,
+
+  endTime:
+    selectedSlot.endTime,
+
+  scheduledDate:
+    selectedDeliveryDate,
+
+  maxOrders:
+    selectedSlot.maxOrders,
+
+  bookedOrders:
+    selectedBookedOrders + 1,
+
+  remainingOrders:
+    selectedSlot.maxOrders -
+    (selectedBookedOrders + 1),
+},
+  };
+}
 
   // ===========================
   // ADMIN - ALL ORDERS
@@ -699,15 +981,17 @@ async findByShop(
   }
 
   if (
-    dto.status === "SCHEDULED"
-  ) {
-    updateData.scheduledDate =
-      dto.scheduledDate
-        ? new Date(
-            dto.scheduledDate,
-          )
-        : null;
+  dto.status === "SCHEDULED"
+) {
+  if (!order.scheduledDate) {
+    throw new NotFoundException(
+      "Delivery schedule is not assigned to this order.",
+    );
   }
+
+  updateData.scheduledDate =
+    order.scheduledDate;
+}
 
   if (
     dto.status ===

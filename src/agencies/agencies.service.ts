@@ -1,4 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import {
+  Injectable,
+} from "@nestjs/common";
+
 import { eq } from "drizzle-orm";
 
 import { db } from "../db";
@@ -6,6 +9,7 @@ import { db } from "../db";
 import {
   agencies,
   agencyProfiles,
+  agencyShopConnections,
   users,
   products,
   orders,
@@ -15,73 +19,54 @@ import {
 
 @Injectable()
 export class AgenciesService {
+
   // ==========================================
   // ALL APPROVED AGENCIES
   // ==========================================
 
-async findAll(
-  userId?: string,
-) {
-  let assignedAgencyId: string | null =
-  null;
-
-if (userId) {
-  const shop =
-    await db.query.shops.findFirst({
-      where: eq(
-        shops.userId,
-        userId,
-      ),
-    });
-
-  if (
-    shop &&
-    shop.registrationType ===
-      "AGENCY_CREATED"
-  ) {
-    assignedAgencyId =
-      shop.agencyId;
-  }
-}
+  async findAll()  {
     const agencyList =
       await db.query.agencies.findMany();
 
- const result: {
-  id: string;
-  agencyName: string;
-  ownerName: string;
-  phone: string;
-  address: string;
-  logo: string;
-  description: string;
-  productCount: number;
-  shopCount: number;
-  categories: string[];
-}[] = [];
+    const result: {
+      id: string;
+      agencyName: string;
+      ownerName: string;
+      phone: string;
+      address: string;
+      logo: string;
+      description: string;
+      productCount: number;
+      shopCount: number;
+      categories: string[];
+    }[] = [];
 
-    for (const agency of agencyList) {
-       if (
-    assignedAgencyId &&
-    agency.id !==
-      assignedAgencyId
-  ) {
-    continue;
-  }
+    for (
+      const agency of agencyList
+    ) {
 
-  const user =
-    await db.query.users.findFirst({
-      where: eq(
-        users.id,
-        agency.userId,
-      ),
-    });
+      // ========================================
+      // ONLY APPROVED AGENCIES
+      // ========================================
 
-    if (
-  !user ||
-  user.status !== "APPROVED"
-) {
-  continue;
-}
+      const user =
+        await db.query.users.findFirst({
+          where: eq(
+            users.id,
+            agency.userId,
+          ),
+        });
+
+      if (
+        !user ||
+        user.status !== "APPROVED"
+      ) {
+        continue;
+      }
+
+      // ========================================
+      // AGENCY PROFILE
+      // ========================================
 
       const profile =
         await db.query.agencyProfiles.findFirst({
@@ -91,6 +76,10 @@ if (userId) {
           ),
         });
 
+      // ========================================
+      // PRODUCTS
+      // ========================================
+
       const productList =
         await db.query.products.findMany({
           where: eq(
@@ -99,13 +88,17 @@ if (userId) {
           ),
         });
 
-        const connectedShops =
-  await db.query.shops.findMany({
-    where: eq(
-      shops.agencyId,
-      agency.id,
-    ),
-  });
+      // ========================================
+      // CONNECTED SHOPS
+      // ========================================
+
+      const connections =
+        await db.query.agencyShopConnections.findMany({
+          where: eq(
+            agencyShopConnections.agencyId,
+            agency.id,
+          ),
+        });
 
       const categories = [
         ...new Set(
@@ -117,34 +110,34 @@ if (userId) {
       ];
 
       result.push({
-  id: agency.id,
+        id: agency.id,
 
-  agencyName:
-    agency.agencyName,
+        agencyName:
+          agency.agencyName,
 
-  ownerName:
-    agency.ownerName,
+        ownerName:
+          agency.ownerName,
 
-  phone:
-    agency.phone,
+        phone:
+          agency.phone,
 
-  address:
-    profile?.address ?? "",
+        address:
+          profile?.address ?? "",
 
-  logo:
-    profile?.logo ?? "",
+        logo:
+          profile?.logo ?? "",
 
-  description:
-    profile?.description ?? "",
+        description:
+          profile?.description ?? "",
 
-  productCount:
-    productList.length,
+        productCount:
+          productList.length,
 
-  shopCount:
-    connectedShops.length,
+        shopCount:
+          connections.length,
 
-  categories,
-});
+        categories,
+      });
     }
 
     return result;
@@ -154,7 +147,9 @@ if (userId) {
   // SINGLE AGENCY
   // ==========================================
 
-  async findOne(id: string) {
+  async findOne(
+    id: string,
+  ) {
     const agency =
       await db.query.agencies.findFirst({
         where: eq(
@@ -183,6 +178,14 @@ if (userId) {
       await db.query.products.findMany({
         where: eq(
           products.agencyId,
+          agency.id,
+        ),
+      });
+
+    const connections =
+      await db.query.agencyShopConnections.findMany({
+        where: eq(
+          agencyShopConnections.agencyId,
           agency.id,
         ),
       });
@@ -223,300 +226,366 @@ if (userId) {
         productCount:
           productList.length,
 
+        shopCount:
+          connections.length,
+
         categories,
       },
     };
   }
 
-  async dashboard(userId: string) {
-  const agency =
-    await db.query.agencies.findFirst({
-      where: eq(
-        agencies.userId,
-        userId,
-      ),
-    });
+  // ==========================================
+  // AGENCY DASHBOARD
+  // ==========================================
 
-  if (!agency) {
-    return {
-      success: false,
-      message: "Agency not found",
-    };
-  }
-
-  const profile =
-    await db.query.agencyProfiles.findFirst({
-      where: eq(
-        agencyProfiles.agencyId,
-        agency.id,
-      ),
-    });
-
-  const productList =
-    await db.query.products.findMany({
-      where: eq(
-        products.agencyId,
-        agency.id,
-      ),
-    });
-
-  const agencyOrders =
-    await db.query.orders.findMany({
-      where: eq(
-        orders.agencyId,
-        agency.id,
-      ),
-    });
-const connectedShops =
-  await db.query.shops.findMany({
-    where: eq(
-      shops.agencyId,
-      agency.id,
-    ),
-  });
-
-  let totalRevenue = 0;
-  let totalCasesSold = 0;
-
-  const productSales: Record<
-    string,
-    {
-      name: string;
-      sold: number;
-    }
-  > = {};
-
-  const shopOrders: Record<
-    string,
-    {
-      shopName: string;
-      orders: number;
-    }
-  > = {};
-
-  for (const order of agencyOrders) {
-    if (
-      order.status !== "DELIVERED"
-    ) {
-      continue;
-    }
-
-    totalRevenue += Number(
-      order.totalAmount ?? 0,
-    );
-
-    const items =
-      await db.query.orderItems.findMany({
+  async dashboard(
+    userId: string,
+  ) {
+    const agency =
+      await db.query.agencies.findFirst({
         where: eq(
-          orderItems.orderId,
-          order.id,
+          agencies.userId,
+          userId,
         ),
       });
 
-    for (const item of items) {
-      totalCasesSold += Number(
-        item.cases ?? 0,
-      );
+    if (!agency) {
+      return {
+        success: false,
+        message:
+          "Agency not found",
+      };
+    }
 
-      const product =
-        await db.query.products.findFirst({
+    const profile =
+      await db.query.agencyProfiles.findFirst({
+        where: eq(
+          agencyProfiles.agencyId,
+          agency.id,
+        ),
+      });
+
+    const productList =
+      await db.query.products.findMany({
+        where: eq(
+          products.agencyId,
+          agency.id,
+        ),
+      });
+
+    const agencyOrders =
+      await db.query.orders.findMany({
+        where: eq(
+          orders.agencyId,
+          agency.id,
+        ),
+      });
+
+    // ========================================
+    // CONNECTED SHOPS
+    // ========================================
+
+    const connections =
+      await db.query.agencyShopConnections.findMany({
+        where: eq(
+          agencyShopConnections.agencyId,
+          agency.id,
+        ),
+      });
+
+    let totalRevenue = 0;
+    let totalCasesSold = 0;
+
+    const productSales: Record<
+      string,
+      {
+        name: string;
+        sold: number;
+      }
+    > = {};
+
+    const shopOrders: Record<
+      string,
+      {
+        shopName: string;
+        orders: number;
+      }
+    > = {};
+
+    // ========================================
+    // PROCESS DELIVERED ORDERS
+    // ========================================
+
+    for (
+      const order of agencyOrders
+    ) {
+
+      if (
+        order.status !==
+        "DELIVERED"
+      ) {
+        continue;
+      }
+
+      totalRevenue +=
+        Number(
+          order.totalAmount ?? 0,
+        );
+
+      const items =
+        await db.query.orderItems.findMany({
           where: eq(
-            products.id,
-            item.productId,
+            orderItems.orderId,
+            order.id,
           ),
         });
 
-      if (product) {
-        if (
-          !productSales[
-            product.id
-          ]
-        ) {
+      for (
+        const item of items
+      ) {
+        totalCasesSold +=
+          Number(
+            item.cases ?? 0,
+          );
+
+        const product =
+          await db.query.products.findFirst({
+            where: eq(
+              products.id,
+              item.productId,
+            ),
+          });
+
+        if (product) {
+
+          if (
+            !productSales[
+              product.id
+            ]
+          ) {
+            productSales[
+              product.id
+            ] = {
+              name:
+                product.name,
+
+              sold: 0,
+            };
+          }
+
           productSales[
             product.id
+          ].sold +=
+            Number(
+              item.cases,
+            );
+        }
+      }
+
+      // ======================================
+      // SHOP
+      // ======================================
+
+      const shop =
+        await db.query.shops.findFirst({
+          where: eq(
+            shops.id,
+            order.shopId,
+          ),
+        });
+
+      if (shop) {
+
+        if (
+          !shopOrders[
+            shop.id
+          ]
+        ) {
+          shopOrders[
+            shop.id
           ] = {
-            name: product.name,
-            sold: 0,
+            shopName:
+              shop.shopName,
+
+            orders: 0,
           };
         }
 
-        productSales[
-          product.id
-        ].sold += Number(
-          item.cases,
-        );
-      }
-    }
-
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.id,
-          order.shopId,
-        ),
-      });
-
-    if (shop) {
-      if (
-        !shopOrders[
-          shop.id
-        ]
-      ) {
         shopOrders[
           shop.id
-        ] = {
-          shopName:
-            shop.shopName,
-          orders: 0,
-        };
+        ].orders++;
       }
-
-      shopOrders[
-        shop.id
-      ].orders++;
     }
-  }
 
-  const topProducts =
-    Object.values(
-      productSales,
-    )
-      .sort(
-        (a, b) =>
-          b.sold -
-          a.sold,
+    // ========================================
+    // TOP PRODUCTS
+    // ========================================
+
+    const topProducts =
+      Object.values(
+        productSales,
       )
-      .slice(0, 5);
+        .sort(
+          (a, b) =>
+            b.sold -
+            a.sold,
+        )
+        .slice(0, 5);
 
-  const topShops =
-    Object.values(
-      shopOrders,
-    )
-      .sort(
-        (a, b) =>
-          b.orders -
-          a.orders,
+    // ========================================
+    // TOP SHOPS
+    // ========================================
+
+    const topShops =
+      Object.values(
+        shopOrders,
       )
-      .slice(0, 5);
+        .sort(
+          (a, b) =>
+            b.orders -
+            a.orders,
+        )
+        .slice(0, 5);
 
-  return {
-    success: true,
-
-    agency: {
-      agencyName:
-        agency.agencyName,
-      ownerName:
-        agency.ownerName,
-      phone:
-        agency.phone,
-      address:
-        profile?.address ??
-        "",
-      logo:
-        profile?.logo ??
-        "",
-    },
-
-    stats: {
-      totalRevenue,
-
-      totalProducts:
-        productList.length,
-
-      activeProducts:
-        productList.filter(
-          (p) =>
-            p.isActive ===
-            "true",
-        ).length,
-
-      outOfStock:
-        productList.filter(
-          (p) =>
-            Number(
-              p.stock,
-            ) <= 0,
-        ).length,
-
-      connectedShops:
-        connectedShops.length,
-
-      totalOrders:
-        agencyOrders.length,
-
-      pendingOrders:
-        agencyOrders.filter(
-          (o) =>
-            o.status ===
-            "PENDING",
-        ).length,
-
-      deliveredOrders:
-        agencyOrders.filter(
-          (o) =>
-            o.status ===
-            "DELIVERED",
-        ).length,
-
-      totalCasesSold,
-    },
-
-    topProducts,
-
-    topShops,
-  };
-}
-async updateProfile(
-  userId: string,
-  body: {
-    agencyName: string;
-    ownerName: string;
-    phone: string;
-    address: string;
-  },
-) {
-  const agency =
-    await db.query.agencies.findFirst({
-      where: eq(
-        agencies.userId,
-        userId,
-      ),
-    });
-
-  if (!agency) {
     return {
-      success: false,
-      message: "Agency not found",
+      success: true,
+
+      agency: {
+        agencyName:
+          agency.agencyName,
+
+        ownerName:
+          agency.ownerName,
+
+        phone:
+          agency.phone,
+
+        address:
+          profile?.address ??
+          "",
+
+        logo:
+          profile?.logo ??
+          "",
+      },
+
+      stats: {
+        totalRevenue,
+
+        totalProducts:
+          productList.length,
+
+        activeProducts:
+          productList.filter(
+            (p) =>
+              p.isActive ===
+              "true",
+          ).length,
+
+        outOfStock:
+          productList.filter(
+            (p) =>
+              Number(
+                p.stock,
+              ) <= 0,
+          ).length,
+
+        connectedShops:
+          connections.length,
+
+        totalOrders:
+          agencyOrders.length,
+
+        pendingOrders:
+          agencyOrders.filter(
+            (o) =>
+              o.status ===
+              "PENDING",
+          ).length,
+
+        deliveredOrders:
+          agencyOrders.filter(
+            (o) =>
+              o.status ===
+              "DELIVERED",
+          ).length,
+
+        totalCasesSold,
+      },
+
+      topProducts,
+
+      topShops,
     };
   }
 
-  // Update agency table
-  await db
-    .update(agencies)
-    .set({
-      agencyName: body.agencyName,
-      ownerName: body.ownerName,
-      phone: body.phone,
-    })
-    .where(eq(agencies.id, agency.id));
+  // ==========================================
+  // UPDATE AGENCY PROFILE
+  // ==========================================
 
-  // Update profile table
-  await db
-    .update(agencyProfiles)
-    .set({
-      address: body.address,
-    })
-    .where(
-      eq(
-        agencyProfiles.agencyId,
-        agency.id,
-      ),
-    );
+  async updateProfile(
+    userId: string,
+    body: {
+      agencyName: string;
+      ownerName: string;
+      phone: string;
+      address: string;
+    },
+  ) {
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.userId,
+          userId,
+        ),
+      });
 
-  return {
-    success: true,
-    message:
-      "Profile updated successfully.",
-  };
-}
+    if (!agency) {
+      return {
+        success: false,
+        message:
+          "Agency not found",
+      };
+    }
+
+    // Update agency
+    await db
+      .update(agencies)
+      .set({
+        agencyName:
+          body.agencyName,
+
+        ownerName:
+          body.ownerName,
+
+        phone:
+          body.phone,
+      })
+      .where(
+        eq(
+          agencies.id,
+          agency.id,
+        ),
+      );
+
+    // Update agency profile
+    await db
+      .update(agencyProfiles)
+      .set({
+        address:
+          body.address,
+      })
+      .where(
+        eq(
+          agencyProfiles.agencyId,
+          agency.id,
+        ),
+      );
+
+    return {
+      success: true,
+      message:
+        "Profile updated successfully.",
+    };
+  }
 }

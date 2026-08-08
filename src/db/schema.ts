@@ -81,14 +81,6 @@ export const shops = pgTable("shops", {
 
   userId: varchar({ length: 255 }).notNull(),
 
-  agencyId: varchar({ length: 255 }).notNull(),
-
-  registrationType: varchar({
-    length: 30,
-  })
-    .default("SELF_REGISTERED")
-    .notNull(),
-
   shopName: varchar({ length: 255 }).notNull(),
 
   ownerName: varchar({ length: 255 }).notNull(),
@@ -98,10 +90,6 @@ export const shops = pgTable("shops", {
   address: varchar({ length: 500 }).notNull(),
 
   pincode: varchar({ length: 10 }).notNull(),
-
-  deliveryDay: varchar({ length: 20 }).notNull(),
-
-  deliverySlot: varchar({ length: 100 }).notNull(),
 
   createdAt: timestamp().defaultNow().notNull(),
 });
@@ -254,6 +242,10 @@ export const orders = pgTable(
 
     deliveredAt: timestamp(),
 
+    slotId: varchar({
+  length: 255,
+}),
+
     createdAt: timestamp()
       .defaultNow()
       .notNull(),
@@ -394,6 +386,110 @@ export const cartItems = pgTable(
     createdAt: timestamp()
       .defaultNow()
       .notNull(),
+  },
+);
+
+export const agencyShopRequests = pgTable(
+  "agency_shop_requests",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+
+    agencyId: varchar({
+      length: 255,
+    }).notNull(),
+
+    shopId: varchar({
+      length: 255,
+    }).notNull(),
+
+    requestedBy: varchar({
+      length: 20,
+    }).notNull(),
+
+    status: varchar({
+      length: 20,
+    })
+      .default("PENDING")
+      .notNull(),
+
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+export const agencyShopConnections =
+  pgTable(
+    "agency_shop_connections",
+    {
+      id: uuid()
+        .defaultRandom()
+        .primaryKey(),
+
+      agencyId: varchar({
+        length: 255,
+      }).notNull(),
+
+      shopId: varchar({
+        length: 255,
+      }).notNull(),
+
+      connectedAt:
+        timestamp()
+          .defaultNow()
+          .notNull(),
+    },
+  );
+
+export const deliverySlots = pgTable(
+  "delivery_slots",
+  {
+    id: uuid()
+      .defaultRandom()
+      .primaryKey(),
+
+    // Agency that owns the delivery schedule
+    agencyId: varchar({
+      length: 255,
+    }).notNull(),
+
+    // Connected shop for whom this
+    // delivery schedule is created
+    shopId: varchar({
+      length: 255,
+    }).notNull(),
+
+    // Example: Monday
+    day: varchar({
+      length: 20,
+    }).notNull(),
+
+    // Example: 09:00 AM
+    startTime: varchar({
+      length: 20,
+    }).notNull(),
+
+    // Example: 12:00 PM
+    endTime: varchar({
+      length: 20,
+    }).notNull(),
+
+    // Maximum orders that can be
+    // delivered in this slot
+    maxOrders: integer()
+      .default(50)
+      .notNull(),
+
+    isActive: varchar({
+      length: 10,
+    })
+      .default("true")
+      .notNull(),
+
+    createdAt:
+      timestamp()
+        .defaultNow()
+        .notNull(),
   },
 );
 
