@@ -7,6 +7,7 @@ import {
 import {
   eq,
   and,
+  sql,
 } from "drizzle-orm";
 
 import { db } from "../db";
@@ -510,12 +511,9 @@ export class AgencyConnectionsService {
       })
       .from(agencyShopConnections)
       .innerJoin(
-        agencies,
-        eq(
-          agencyShopConnections.agencyId,
-          agencies.id,
-        ),
-      )
+  shops,
+  sql`${agencyShopConnections.shopId}::uuid = ${shops.id}`,
+)
       .where(
         eq(
           agencyShopConnections.shopId,
