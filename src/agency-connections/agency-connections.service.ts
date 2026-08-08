@@ -526,72 +526,73 @@ export class AgencyConnectionsService {
   // AGENCY → MY SHOPS
   // ==========================================
 
-  async getMyShops(
-    agencyId: string,
-    user: any,
-  ) {
-    if (user.role !== "AGENCY") {
-      throw new ForbiddenException(
-        "Only agencies can access their shops.",
-      );
-    }
+  // ==========================================
+// AGENCY → MY SHOPS
+// ==========================================
 
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.id,
-          agencyId,
-        ),
-      });
-
-    if (
-      !agency ||
-      agency.userId !== user.id
-    ) {
-      throw new ForbiddenException(
-        "You can only access your own shops.",
-      );
-    }
-
-    return db
-      .select({
-        connectionId:
-          agencyShopConnections.id,
-
-        shopId:
-          shops.id,
-
-        shopName:
-          shops.shopName,
-
-        ownerName:
-          shops.ownerName,
-
-        phone:
-          shops.phone,
-
-        address:
-          shops.address,
-
-        pincode:
-          shops.pincode,
-
-        connectedAt:
-          agencyShopConnections.connectedAt,
-      })
-      .from(agencyShopConnections)
-      .innerJoin(
-        shops,
-        eq(
-          agencyShopConnections.shopId,
-          shops.id,
-        ),
-      )
-      .where(
-        eq(
-          agencyShopConnections.agencyId,
-          agencyId,
-        ),
-      );
+async getMyShops(
+  agencyId: string,
+  user: any,
+) {
+  if (user.role !== "AGENCY") {
+    throw new ForbiddenException(
+      "Only agencies can access their shops.",
+    );
   }
+
+  const agency =
+    await db.query.agencies.findFirst({
+      where: eq(
+        agencies.id,
+        agencyId,
+      ),
+    });
+
+  if (
+    !agency ||
+    agency.userId !== user.id
+  ) {
+    throw new ForbiddenException(
+      "You can only access your own shops.",
+    );
+  }
+
+  return db
+    .select({
+      connectionId:
+        agencyShopConnections.id,
+
+      shopId:
+        shops.id,
+
+      shopName:
+        shops.shopName,
+
+      ownerName:
+        shops.ownerName,
+
+      phone:
+        shops.phone,
+
+      address:
+        shops.address,
+
+      pincode:
+        shops.pincode,
+
+      connectedAt:
+        agencyShopConnections.connectedAt,
+    })
+    .from(agencyShopConnections)
+    .innerJoin(
+      shops,
+      sql`${agencyShopConnections.shopId}::uuid = ${shops.id}`,
+    )
+    .where(
+      eq(
+        agencyShopConnections.agencyId,
+        agencyId,
+      ),
+    );
+}
 }
