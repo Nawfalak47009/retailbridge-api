@@ -128,19 +128,22 @@ export class DeliverySlotsService {
     // Create slot
     // ------------------------------------------
 
-    const [slot] =
-      await db
-        .insert(deliverySlots)
-        .values({
-          agencyId: dto.agencyId,
-          shopId: dto.shopId,
-          day: dto.day,
-          startTime: dto.startTime,
-          endTime: dto.endTime,
-          maxOrders: dto.maxOrders,
-          isActive: "true",
-        })
-        .returning();
+    // ------------------------------------------
+// Create delivery schedule
+// ------------------------------------------
+
+const [slot] =
+  await db
+    .insert(deliverySlots)
+    .values({
+      agencyId: dto.agencyId,
+      shopId: dto.shopId,
+      day: dto.day,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      isActive: "true",
+    })
+    .returning();
 
     return {
       success: true,

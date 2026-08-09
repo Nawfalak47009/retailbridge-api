@@ -10,9 +10,6 @@ import { Type } from "class-transformer";
 export class CheckoutAgencyDto {
   @IsString()
   agencyId!: string;
-
-  @IsString()
-  slotId!: string;
 }
 
 export class CheckoutDto {

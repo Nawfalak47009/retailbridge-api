@@ -6,7 +6,6 @@ import {
 import {
   eq,
   and,
-  count,
 } from "drizzle-orm";
 
 import { db } from "../db";
@@ -132,7 +131,7 @@ async create(
   dto: CreateOrderDto,
 ) {
   // ==========================================
-  // FIND SHOP FROM LOGGED-IN USER
+  // FIND SHOP
   // ==========================================
 
   const shop =
@@ -190,173 +189,146 @@ async create(
       "Your shop is not connected to this agency.",
     );
   }
-// ==========================================
-// FIND NEXT AVAILABLE DELIVERY SLOT
-// ==========================================
 
-const availableSlots =
-  await db
-    .select()
-    .from(deliverySlots)
-    .where(
-      and(
-        eq(
-          deliverySlots.agencyId,
-          agency.id,
-        ),
-        eq(
-          deliverySlots.shopId,
-          shop.id,
-        ),
-        eq(
-          deliverySlots.isActive,
-          "true",
-        ),
-      ),
-    );
+  // ==========================================
+  // FIND DELIVERY SCHEDULE
+  // FOR THIS SHOP + AGENCY
+  // ==========================================
 
-if (availableSlots.length === 0) {
-  throw new NotFoundException(
-    "No delivery slots are available for this shop.",
-  );
-}
-
-// ==========================================
-// FIND EARLIEST AVAILABLE SLOT
-// ==========================================
-
-let selectedSlot:
-  (typeof availableSlots)[number] | null =
-  null;
-
-let selectedDeliveryDate:
-  Date | null = null;
-
-let selectedBookedOrders = 0;
-
-for (const candidate of availableSlots) {
-  let deliveryDate =
-    getNextDayDate(candidate.day);
-
-  let scheduledDate =
-    setSlotTime(
-      deliveryDate,
-      candidate.startTime,
-    );
-
-  // If today's slot has already started,
-  // use next week's occurrence.
-  if (
-    scheduledDate.getTime() <=
-    Date.now()
-  ) {
-    scheduledDate.setDate(
-      scheduledDate.getDate() + 7,
-    );
-  }
-
-  const bookedResult =
+  const availableSlots =
     await db
-      .select({
-        count: count(),
-      })
-      .from(orders)
+      .select()
+      .from(deliverySlots)
       .where(
         and(
           eq(
-            orders.slotId,
-            candidate.id,
+            deliverySlots.agencyId,
+            agency.id,
           ),
           eq(
-            orders.agencyId,
-            agency.id,
+            deliverySlots.shopId,
+            shop.id,
+          ),
+          eq(
+            deliverySlots.isActive,
+            "true",
           ),
         ),
       );
 
-  const bookedOrders =
-    Number(
-      bookedResult[0]?.count ?? 0,
-    );
+  // ==========================================
+  // DELIVERY IS OPTIONAL
+  // ==========================================
 
-  if (
-    bookedOrders >=
-    candidate.maxOrders
-  ) {
-    continue;
+  let selectedSlot:
+    (typeof availableSlots)[number] | null =
+    null;
+
+  let selectedDeliveryDate:
+    Date | null = null;
+
+  if (availableSlots.length > 0) {
+    // Find the earliest upcoming delivery day
+    for (const candidate of availableSlots) {
+      let deliveryDate =
+        getNextDayDate(
+          candidate.day,
+        );
+
+      let scheduledDate =
+        setSlotTime(
+          deliveryDate,
+          candidate.startTime,
+        );
+
+      // If today's delivery time has passed,
+      // use next week's occurrence.
+      if (
+        scheduledDate.getTime() <=
+        Date.now()
+      ) {
+        scheduledDate.setDate(
+          scheduledDate.getDate() + 7,
+        );
+      }
+
+      if (
+        !selectedDeliveryDate ||
+        scheduledDate <
+          selectedDeliveryDate
+      ) {
+        selectedSlot =
+          candidate;
+
+        selectedDeliveryDate =
+          scheduledDate;
+      }
+    }
   }
-
-  if (
-    !selectedDeliveryDate ||
-    scheduledDate <
-      selectedDeliveryDate
-  ) {
-    selectedSlot =
-      candidate;
-
-    selectedDeliveryDate =
-      scheduledDate;
-
-    selectedBookedOrders =
-      bookedOrders;
-  }
-}
-
-if (
-  !selectedSlot ||
-  !selectedDeliveryDate
-) {
-  throw new UnauthorizedException(
-    "All upcoming delivery slots are fully booked.",
-  );
-}
 
   // ==========================================
   // CREATE ORDER
   // ==========================================
 
- const [order] =
-  await db
-    .insert(orders)
-    .values({
-      shopId: shop.id,
-      agencyId: agency.id,
-      slotId: selectedSlot.id,
-      scheduledDate:
-        selectedDeliveryDate,
-      remarks: dto.remarks,
-    })
-    .returning();
+  const [order] =
+    await db
+      .insert(orders)
+      .values({
+        shopId:
+          shop.id,
+
+        agencyId:
+          agency.id,
+
+        slotId:
+          selectedSlot?.id ?? null,
+
+        scheduledDate:
+          selectedDeliveryDate,
+
+        status:
+          selectedSlot
+            ? "PENDING"
+            : "DELIVERY_SCHEDULE_PENDING",
+
+        remarks:
+          dto.remarks,
+      })
+      .returning();
+
+  // ==========================================
+  // RESPONSE
+  // ==========================================
 
   return {
     success: true,
+
     message:
-      "Order placed successfully.",
+      selectedSlot
+        ? "Order placed successfully. Delivery has been scheduled."
+        : "Order placed successfully. Delivery schedule is pending from the agency.",
+
     order,
-    deliverySlot: {
-  id: selectedSlot.id,
 
-  day: selectedSlot.day,
+    deliverySlot:
+      selectedSlot
+        ? {
+            id:
+              selectedSlot.id,
 
-  startTime:
-    selectedSlot.startTime,
+            day:
+              selectedSlot.day,
 
-  endTime:
-    selectedSlot.endTime,
+            startTime:
+              selectedSlot.startTime,
 
-  scheduledDate:
-    selectedDeliveryDate,
+            endTime:
+              selectedSlot.endTime,
 
-  maxOrders:
-    selectedSlot.maxOrders,
-
-  bookedOrders:
-    selectedBookedOrders + 1,
-
-  remainingOrders:
-    selectedSlot.maxOrders -
-    (selectedBookedOrders + 1),
-},
+            scheduledDate:
+              selectedDeliveryDate,
+          }
+        : null,
   };
 }
 
@@ -922,11 +894,15 @@ async findByShop(
   // AGENCY - UPDATE STATUS
   // ===========================
 
- async updateStatus(
+async updateStatus(
   userId: string,
   id: string,
   dto: UpdateOrderDto,
 ) {
+  // ==========================================
+  // FIND AGENCY
+  // ==========================================
+
   const agency =
     await db.query.agencies.findFirst({
       where: eq(
@@ -940,6 +916,10 @@ async findByShop(
       "Agency not found.",
     );
   }
+
+  // ==========================================
+  // FIND ORDER
+  // ==========================================
 
   const order =
     await db.query.orders.findFirst({
@@ -955,11 +935,21 @@ async findByShop(
     );
   }
 
-  if (order.agencyId !== agency.id) {
+  // ==========================================
+  // VERIFY ORDER BELONGS TO AGENCY
+  // ==========================================
+
+  if (
+    order.agencyId !== agency.id
+  ) {
     throw new UnauthorizedException(
       "You cannot update this order.",
     );
   }
+
+  // ==========================================
+  // UPDATE DATA
+  // ==========================================
 
   const updateData: Partial<
     typeof orders.$inferInsert
@@ -973,6 +963,10 @@ async findByShop(
       dto.trackingMessage,
   };
 
+  // ==========================================
+  // ACCEPTED
+  // ==========================================
+
   if (
     dto.status === "ACCEPTED"
   ) {
@@ -980,18 +974,80 @@ async findByShop(
       new Date();
   }
 
+  // ==========================================
+  // ASSIGN DELIVERY DAY
+  // ==========================================
+
   if (
-  dto.status === "SCHEDULED"
-) {
-  if (!order.scheduledDate) {
-    throw new NotFoundException(
-      "Delivery schedule is not assigned to this order.",
-    );
+    dto.status === "SCHEDULED"
+  ) {
+    if (!dto.slotId) {
+      throw new NotFoundException(
+        "Please select a delivery day.",
+      );
+    }
+
+    // ----------------------------------------
+    // FIND SELECTED DELIVERY SLOT
+    // ----------------------------------------
+
+    const slot =
+      await db.query.deliverySlots.findFirst({
+        where: and(
+          eq(
+            deliverySlots.id,
+            dto.slotId,
+          ),
+          eq(
+            deliverySlots.agencyId,
+            agency.id,
+          ),
+          eq(
+            deliverySlots.shopId,
+            order.shopId,
+          ),
+          eq(
+            deliverySlots.isActive,
+            "true",
+          ),
+        ),
+      });
+
+    if (!slot) {
+      throw new NotFoundException(
+        "This delivery schedule is not available for this shop.",
+      );
+    }
+
+    // ----------------------------------------
+    // CALCULATE NEXT DELIVERY DATE
+    // ----------------------------------------
+
+    const deliveryDate =
+      getNextDayDate(
+        slot.day,
+      );
+
+    const scheduledDate =
+      setSlotTime(
+        deliveryDate,
+        slot.startTime,
+      );
+
+    // ----------------------------------------
+    // SAVE DELIVERY SCHEDULE
+    // ----------------------------------------
+
+    updateData.slotId =
+      slot.id;
+
+    updateData.scheduledDate =
+      scheduledDate;
   }
 
-  updateData.scheduledDate =
-    order.scheduledDate;
-}
+  // ==========================================
+  // OUT FOR DELIVERY
+  // ==========================================
 
   if (
     dto.status ===
@@ -1001,15 +1057,23 @@ async findByShop(
       new Date();
   }
 
+  // ==========================================
+  // DELIVERED
+  // ==========================================
+
   if (
-    dto.status ===
-    "DELIVERED"
+    dto.status === "DELIVERED"
   ) {
     updateData.deliveredAt =
       new Date();
 
-    updateData.rewardPoints = 5;
+    updateData.rewardPoints =
+      5;
   }
+
+  // ==========================================
+  // UPDATE ORDER
+  // ==========================================
 
   const [updated] =
     await db
@@ -1023,27 +1087,40 @@ async findByShop(
       )
       .returning();
 
-  // Reward shop once
- // Reward shop once
-if (
-  dto.status === "DELIVERED" &&
-  order.rewardPoints === 0
-) {
-  await db
-    .insert(rewardTransactions)
-    .values({
-      shopId: order.shopId,
-      orderId: order.id,
-      points: 5,
-      type: "EARN",
-      description: "Order Delivered",
-    });
-}
+  // ==========================================
+  // REWARD SHOP ONCE
+  // ==========================================
+
+  if (
+    dto.status === "DELIVERED" &&
+    order.rewardPoints === 0
+  ) {
+    await db
+      .insert(rewardTransactions)
+      .values({
+        shopId:
+          order.shopId,
+
+        orderId:
+          order.id,
+
+        points: 5,
+
+        type: "EARN",
+
+        description:
+          "Order Delivered",
+      });
+  }
 
   return {
     success: true,
+
     message:
-      "Order updated successfully.",
+      dto.status === "SCHEDULED"
+        ? "Delivery day assigned successfully."
+        : "Order updated successfully.",
+
     order: updated,
   };
 }

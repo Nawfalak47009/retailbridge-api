@@ -4,11 +4,9 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from "@nestjs/common";
-
 import {
   eq,
   and,
-  count,
 } from "drizzle-orm";
 import { S3Service } from "../documents/s3.service";
 
@@ -605,32 +603,6 @@ async checkout(
     );
   }
 
-  // ==========================================
-  // CHECK SLOT SELECTIONS
-  // ==========================================
-
-  if (
-    !dto.orders ||
-    dto.orders.length === 0
-  ) {
-    throw new BadRequestException(
-      "Please select a delivery slot for each agency.",
-    );
-  }
-
-  // ==========================================
-  // MAKE QUICK LOOKUP
-  // ==========================================
-
-  const selectedSlots =
-    new Map(
-      dto.orders.map(
-        (item) => [
-          item.agencyId,
-          item.slotId,
-        ],
-      ),
-    );
 
   const createdOrders:
     typeof orders.$inferSelect[] = [];
@@ -642,20 +614,7 @@ async checkout(
   for (
     const cart of userCarts
   ) {
-    // ========================================
-    // FIND SELECTED SLOT
-    // ========================================
-
-    const slotId =
-      selectedSlots.get(
-        cart.agencyId,
-      );
-
-    if (!slotId) {
-      throw new BadRequestException(
-        `Please select a delivery slot for agency ${cart.agencyId}.`,
-      );
-    }
+   
 
     // ========================================
     // FIND AGENCY
@@ -704,81 +663,43 @@ async checkout(
     // ========================================
 
     const slot =
-      await db.query.deliverySlots.findFirst({
-        where: and(
-          eq(
-            deliverySlots.id,
-            slotId,
-          ),
-          eq(
-            deliverySlots.agencyId,
-            agency.id,
-          ),
-          eq(
-            deliverySlots.isActive,
-            "true",
-          ),
-        ),
-      });
+  await db.query.deliverySlots.findFirst({
+    where: and(
+      eq(
+        deliverySlots.agencyId,
+        agency.id,
+      ),
+      eq(
+        deliverySlots.shopId,
+        shop.id,
+      ),
+      eq(
+        deliverySlots.isActive,
+        "true",
+      ),
+    ),
+  });
 
-    if (!slot) {
-      throw new NotFoundException(
-        "Selected delivery slot is not available.",
-      );
-    }
 
-    // ========================================
-    // CHECK SLOT CAPACITY
-    // ========================================
+   // ========================================
+// CALCULATE DELIVERY DATE
+// ========================================
 
-    const bookedResult =
-      await db
-        .select({
-          count: count(),
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(
-              orders.slotId,
-              slot.id,
-            ),
-            eq(
-              orders.agencyId,
-              agency.id,
-            ),
-          ),
-        );
+let scheduledDate:
+  Date | null = null;
 
-    const bookedOrders =
-      Number(
-        bookedResult[0]?.count ??
-          0,
-      );
+if (slot) {
+  const deliveryDate =
+    getNextDayDate(
+      slot.day,
+    );
 
-    if (
-      bookedOrders >=
-      slot.maxOrders
-    ) {
-      throw new BadRequestException(
-        `${slot.day} ${slot.startTime} - ${slot.endTime} is fully booked.`,
-      );
-    }
-
-    // ========================================
-    // CALCULATE DELIVERY DATE
-    // ========================================
-
-    const deliveryDate =
-      getNextDayDate(
-        slot.day,
-      );
-
-    const scheduledDate =
-      setSlotTime(
-        deliveryDate,
-        slot.startTime,
-      );
+  scheduledDate =
+    setSlotTime(
+      deliveryDate,
+      slot.startTime,
+    );
+};
 
     // ========================================
     // GET CART ITEMS
@@ -839,21 +760,26 @@ async checkout(
             agency.id,
 
           slotId:
-            slot.id,
+  slot?.id ?? null,
 
-          totalAmount,
+status:
+  slot
+    ? "PENDING"
+    : "DELIVERY_SCHEDULE_PENDING",
 
-          deliveryAddress:
-            dto.deliveryAddress,
+totalAmount,
 
-          deliveryPincode:
-            dto.deliveryPincode,
+deliveryAddress:
+  dto.deliveryAddress,
 
-          scheduledDate,
+deliveryPincode:
+  dto.deliveryPincode,
 
-          remarks:
-            dto.remarks ??
-            "",
+scheduledDate,
+
+remarks:
+  dto.remarks ??
+  "",
         })
         .returning();
 

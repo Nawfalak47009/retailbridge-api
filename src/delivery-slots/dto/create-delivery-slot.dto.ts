@@ -1,8 +1,6 @@
 import {
-  IsInt,
   IsNotEmpty,
   IsUUID,
-  Min,
 } from "class-validator";
 
 export class CreateDeliverySlotDto {
@@ -22,8 +20,4 @@ export class CreateDeliverySlotDto {
 
   @IsNotEmpty()
   endTime!: string;
-
-  @IsInt()
-  @Min(1)
-  maxOrders!: number;
 }

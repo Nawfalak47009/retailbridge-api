@@ -459,27 +459,26 @@ export const deliverySlots = pgTable(
       length: 255,
     }).notNull(),
 
-    // Example: Monday
+    // Delivery day
+    // Example: Monday, Tuesday, Thursday
     day: varchar({
       length: 20,
     }).notNull(),
 
+    // Delivery window start
     // Example: 09:00 AM
     startTime: varchar({
       length: 20,
     }).notNull(),
 
-    // Example: 12:00 PM
+    // Delivery window end
+    // Example: 12:00 AM
     endTime: varchar({
       length: 20,
     }).notNull(),
 
-    // Maximum orders that can be
-    // delivered in this slot
-    maxOrders: integer()
-      .default(50)
-      .notNull(),
-
+    // Whether this delivery schedule
+    // is currently active
     isActive: varchar({
       length: 10,
     })
