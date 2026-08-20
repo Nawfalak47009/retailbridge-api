@@ -24,9 +24,8 @@ import {
 
 @Injectable()
 export class DeliverySlotsService {
-
   // ==========================================
-  // CREATE DELIVERY SLOT
+  // CREATE DELIVERY DAY
   // AGENCY ONLY
   // ==========================================
 
@@ -36,7 +35,7 @@ export class DeliverySlotsService {
   ) {
     if (user.role !== "AGENCY") {
       throw new ForbiddenException(
-        "Only agencies can create delivery slots.",
+        "Only agencies can create delivery days.",
       );
     }
 
@@ -60,7 +59,7 @@ export class DeliverySlotsService {
 
     if (agency.userId !== user.id) {
       throw new ForbiddenException(
-        "You can only create slots for your own agency.",
+        "You can only create delivery days for your own agency.",
       );
     }
 
@@ -89,10 +88,50 @@ export class DeliverySlotsService {
     }
 
     // ------------------------------------------
-    // Check duplicate slot
+    // Validate delivery date
     // ------------------------------------------
 
-    const existingSlot =
+    const deliveryDate =
+      new Date(dto.deliveryDate);
+
+    if (
+      Number.isNaN(
+        deliveryDate.getTime(),
+      )
+    ) {
+      throw new BadRequestException(
+        "Invalid delivery date.",
+      );
+    }
+
+    // Normalize to midnight
+    deliveryDate.setHours(
+      0,
+      0,
+      0,
+      0,
+    );
+
+    // ------------------------------------------
+    // Automatically derive weekday
+    // ------------------------------------------
+
+    const day =
+      deliveryDate.toLocaleDateString(
+        "en-US",
+        {
+          weekday: "long",
+        },
+      );
+
+    // ------------------------------------------
+    // Check duplicate delivery day
+    //
+    // Same agency + same shop +
+    // same delivery date = duplicate
+    // ------------------------------------------
+
+    const existingDeliveryDay =
       await db.query.deliverySlots.findFirst({
         where: and(
           eq(
@@ -104,57 +143,53 @@ export class DeliverySlotsService {
             dto.shopId,
           ),
           eq(
-            deliverySlots.day,
-            dto.day,
-          ),
-          eq(
-            deliverySlots.startTime,
-            dto.startTime,
-          ),
-          eq(
-            deliverySlots.endTime,
-            dto.endTime,
+            deliverySlots.deliveryDate,
+            deliveryDate,
           ),
         ),
       });
 
-    if (existingSlot) {
+    if (existingDeliveryDay) {
       throw new BadRequestException(
-        "This delivery slot already exists for this shop.",
+        "This delivery day already exists for this shop.",
       );
     }
 
     // ------------------------------------------
-    // Create slot
+    // Create delivery day
     // ------------------------------------------
 
-    // ------------------------------------------
-// Create delivery schedule
-// ------------------------------------------
+    const [deliveryDay] =
+      await db
+        .insert(deliverySlots)
+        .values({
+          agencyId:
+            dto.agencyId,
 
-const [slot] =
-  await db
-    .insert(deliverySlots)
-    .values({
-      agencyId: dto.agencyId,
-      shopId: dto.shopId,
-      day: dto.day,
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      isActive: "true",
-    })
-    .returning();
+          shopId:
+            dto.shopId,
+
+          day,
+
+          deliveryDate,
+
+          isActive:
+            "true",
+        })
+        .returning();
 
     return {
       success: true,
+
       message:
-        "Delivery slot created successfully.",
-      slot,
+        "Delivery day created successfully.",
+
+      slot: deliveryDay,
     };
   }
 
   // ==========================================
-  // AGENCY → ALL MY SLOTS
+  // AGENCY → ALL MY DELIVERY DAYS
   // ==========================================
 
   async findByAgency(
@@ -163,7 +198,7 @@ const [slot] =
   ) {
     if (user.role !== "AGENCY") {
       throw new ForbiddenException(
-        "Only agencies can access agency slots.",
+        "Only agencies can access agency delivery days.",
       );
     }
 
@@ -180,7 +215,7 @@ const [slot] =
       agency.userId !== user.id
     ) {
       throw new ForbiddenException(
-        "You can only access your own agency slots.",
+        "You can only access your own agency delivery days.",
       );
     }
 
@@ -196,7 +231,7 @@ const [slot] =
   }
 
   // ==========================================
-  // AGENCY → SLOTS FOR ONE CONNECTED SHOP
+  // AGENCY → ONE SHOP'S DELIVERY DAYS
   // ==========================================
 
   async findByAgencyShop(
@@ -206,7 +241,7 @@ const [slot] =
   ) {
     if (user.role !== "AGENCY") {
       throw new ForbiddenException(
-        "Only agencies can access agency slots.",
+        "Only agencies can access agency delivery days.",
       );
     }
 
@@ -227,7 +262,7 @@ const [slot] =
       agency.userId !== user.id
     ) {
       throw new ForbiddenException(
-        "You can only access your own agency slots.",
+        "You can only access your own agency delivery days.",
       );
     }
 
@@ -256,7 +291,7 @@ const [slot] =
     }
 
     // ------------------------------------------
-    // Return slots
+    // Return delivery days
     // ------------------------------------------
 
     return db
@@ -277,7 +312,7 @@ const [slot] =
   }
 
   // ==========================================
-  // SHOP → CONNECTED AGENCY SLOTS
+  // SHOP → CONNECTED AGENCY DELIVERY DAYS
   // ==========================================
 
   async findByShop(
@@ -286,7 +321,7 @@ const [slot] =
   ) {
     if (user.role !== "SHOP") {
       throw new ForbiddenException(
-        "Only shops can access shop slots.",
+        "Only shops can access shop delivery days.",
       );
     }
 
@@ -314,12 +349,14 @@ const [slot] =
           connection.agencyId,
       );
 
-    if (agencyIds.length === 0) {
+    if (
+      agencyIds.length === 0
+    ) {
       return [];
     }
 
     // ------------------------------------------
-    // Return active slots
+    // Return active delivery days
     // ------------------------------------------
 
     return db
@@ -344,7 +381,7 @@ const [slot] =
   }
 
   // ==========================================
-  // DELETE SLOT
+  // DELETE DELIVERY DAY
   // AGENCY ONLY
   // ==========================================
 
@@ -354,11 +391,11 @@ const [slot] =
   ) {
     if (user.role !== "AGENCY") {
       throw new ForbiddenException(
-        "Only agencies can delete delivery slots.",
+        "Only agencies can delete delivery days.",
       );
     }
 
-    const slot =
+    const deliveryDay =
       await db.query.deliverySlots.findFirst({
         where: eq(
           deliverySlots.id,
@@ -366,9 +403,9 @@ const [slot] =
         ),
       });
 
-    if (!slot) {
+    if (!deliveryDay) {
       throw new BadRequestException(
-        "Delivery slot not found.",
+        "Delivery day not found.",
       );
     }
 
@@ -380,7 +417,7 @@ const [slot] =
       await db.query.agencies.findFirst({
         where: eq(
           agencies.id,
-          slot.agencyId,
+          deliveryDay.agencyId,
         ),
       });
 
@@ -389,7 +426,7 @@ const [slot] =
       agency.userId !== user.id
     ) {
       throw new ForbiddenException(
-        "You can only delete your own agency slots.",
+        "You can only delete your own agency delivery days.",
       );
     }
 
@@ -408,8 +445,9 @@ const [slot] =
 
     return {
       success: true,
+
       message:
-        "Delivery slot deleted successfully.",
+        "Delivery day deleted successfully.",
     };
   }
 }

@@ -448,37 +448,29 @@ export const deliverySlots = pgTable(
       .defaultRandom()
       .primaryKey(),
 
-    // Agency that owns the delivery schedule
+    // Agency that owns the delivery day
     agencyId: varchar({
       length: 255,
     }).notNull(),
 
-    // Connected shop for whom this
-    // delivery schedule is created
+    // Connected shop for whom
+    // this delivery day is created
     shopId: varchar({
       length: 255,
     }).notNull(),
 
-    // Delivery day
-    // Example: Monday, Tuesday, Thursday
+    // Automatically derived from deliveryDate
+    // Example: Monday, Thursday, Saturday
     day: varchar({
       length: 20,
     }).notNull(),
 
-    // Delivery window start
-    // Example: 09:00 AM
-    startTime: varchar({
-      length: 20,
-    }).notNull(),
+    // Actual delivery date
+    // Example: 2026-08-13
+    deliveryDate: timestamp()
+      .notNull(),
 
-    // Delivery window end
-    // Example: 12:00 AM
-    endTime: varchar({
-      length: 20,
-    }).notNull(),
-
-    // Whether this delivery schedule
-    // is currently active
+    // Whether this delivery day is active
     isActive: varchar({
       length: 10,
     })

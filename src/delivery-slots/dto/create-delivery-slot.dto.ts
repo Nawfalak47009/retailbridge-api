@@ -1,6 +1,7 @@
 import {
   IsNotEmpty,
   IsUUID,
+  IsDateString,
 } from "class-validator";
 
 export class CreateDeliverySlotDto {
@@ -15,9 +16,7 @@ export class CreateDeliverySlotDto {
   @IsNotEmpty()
   day!: string;
 
+  @IsDateString()
   @IsNotEmpty()
-  startTime!: string;
-
-  @IsNotEmpty()
-  endTime!: string;
+  deliveryDate!: string;
 }

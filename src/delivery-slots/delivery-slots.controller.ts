@@ -22,13 +22,12 @@ import {
 @Controller("delivery-slots")
 @UseGuards(AuthGuard("jwt"))
 export class DeliverySlotsController {
-
   constructor(
     private readonly deliverySlotsService: DeliverySlotsService,
   ) {}
 
   // ==========================================
-  // AGENCY → CREATE SLOT
+  // AGENCY → CREATE DELIVERY DAY
   // ==========================================
 
   @Post()
@@ -46,7 +45,7 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // AGENCY → ALL MY SLOTS
+  // AGENCY → ALL MY DELIVERY DAYS
   // ==========================================
 
   @Get("agency/:agencyId")
@@ -64,7 +63,7 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // AGENCY → ONE CONNECTED SHOP'S SLOTS
+  // AGENCY → ONE SHOP'S DELIVERY DAYS
   // ==========================================
 
   @Get("agency/:agencyId/shop/:shopId")
@@ -86,7 +85,7 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // SHOP → ITS DELIVERY SLOTS
+  // SHOP → ITS DELIVERY DAYS
   // ==========================================
 
   @Get("shop/:shopId")
@@ -104,7 +103,7 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
-  // AGENCY → DELETE SLOT
+  // AGENCY → DELETE DELIVERY DAY
   // ==========================================
 
   @Delete(":id")
