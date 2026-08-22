@@ -1,0 +1,453 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
+
+import {
+  eq,
+  and,
+  inArray,
+} from "drizzle-orm";
+
+import { db } from "../db";
+
+import {
+  deliverySlots,
+  agencyShopConnections,
+  agencies,
+} from "../db/schema";
+
+import {
+  CreateDeliverySlotDto,
+} from "./dto/create-delivery-slot.dto";
+
+@Injectable()
+export class DeliverySlotsService {
+  // ==========================================
+  // CREATE DELIVERY DAY
+  // AGENCY ONLY
+  // ==========================================
+
+  async create(
+    dto: CreateDeliverySlotDto,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can create delivery days.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify agency
+    // ------------------------------------------
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          dto.agencyId,
+        ),
+      });
+
+    if (!agency) {
+      throw new BadRequestException(
+        "Agency not found.",
+      );
+    }
+
+    if (agency.userId !== user.id) {
+      throw new ForbiddenException(
+        "You can only create delivery days for your own agency.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify shop is connected
+    // ------------------------------------------
+
+    const connection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(
+            agencyShopConnections.agencyId,
+            dto.agencyId,
+          ),
+          eq(
+            agencyShopConnections.shopId,
+            dto.shopId,
+          ),
+        ),
+      });
+
+    if (!connection) {
+      throw new ForbiddenException(
+        "This shop is not connected to your agency.",
+      );
+    }
+
+    // ------------------------------------------
+    // Validate delivery date
+    // ------------------------------------------
+
+    const deliveryDate =
+      new Date(dto.deliveryDate);
+
+    if (
+      Number.isNaN(
+        deliveryDate.getTime(),
+      )
+    ) {
+      throw new BadRequestException(
+        "Invalid delivery date.",
+      );
+    }
+
+    // Normalize to midnight
+    deliveryDate.setHours(
+      0,
+      0,
+      0,
+      0,
+    );
+
+    // ------------------------------------------
+    // Automatically derive weekday
+    // ------------------------------------------
+
+    const day =
+      deliveryDate.toLocaleDateString(
+        "en-US",
+        {
+          weekday: "long",
+        },
+      );
+
+    // ------------------------------------------
+    // Check duplicate delivery day
+    //
+    // Same agency + same shop +
+    // same delivery date = duplicate
+    // ------------------------------------------
+
+    const existingDeliveryDay =
+      await db.query.deliverySlots.findFirst({
+        where: and(
+          eq(
+            deliverySlots.agencyId,
+            dto.agencyId,
+          ),
+          eq(
+            deliverySlots.shopId,
+            dto.shopId,
+          ),
+          eq(
+            deliverySlots.deliveryDate,
+            deliveryDate,
+          ),
+        ),
+      });
+
+    if (existingDeliveryDay) {
+      throw new BadRequestException(
+        "This delivery day already exists for this shop.",
+      );
+    }
+
+    // ------------------------------------------
+    // Create delivery day
+    // ------------------------------------------
+
+    const [deliveryDay] =
+      await db
+        .insert(deliverySlots)
+        .values({
+          agencyId:
+            dto.agencyId,
+
+          shopId:
+            dto.shopId,
+
+          day,
+
+          deliveryDate,
+
+          isActive:
+            "true",
+        })
+        .returning();
+
+    return {
+      success: true,
+
+      message:
+        "Delivery day created successfully.",
+
+      slot: deliveryDay,
+    };
+  }
+
+  // ==========================================
+  // AGENCY → ALL MY DELIVERY DAYS
+  // ==========================================
+
+  async findByAgency(
+    agencyId: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can access agency delivery days.",
+      );
+    }
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          agencyId,
+        ),
+      });
+
+    if (
+      !agency ||
+      agency.userId !== user.id
+    ) {
+      throw new ForbiddenException(
+        "You can only access your own agency delivery days.",
+      );
+    }
+
+    return db
+      .select()
+      .from(deliverySlots)
+      .where(
+        eq(
+          deliverySlots.agencyId,
+          agencyId,
+        ),
+      );
+  }
+
+  // ==========================================
+  // AGENCY → ONE SHOP'S DELIVERY DAYS
+  // ==========================================
+
+  async findByAgencyShop(
+    agencyId: string,
+    shopId: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can access agency delivery days.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify agency
+    // ------------------------------------------
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          agencyId,
+        ),
+      });
+
+    if (
+      !agency ||
+      agency.userId !== user.id
+    ) {
+      throw new ForbiddenException(
+        "You can only access your own agency delivery days.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify shop connection
+    // ------------------------------------------
+
+    const connection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(
+            agencyShopConnections.agencyId,
+            agencyId,
+          ),
+          eq(
+            agencyShopConnections.shopId,
+            shopId,
+          ),
+        ),
+      });
+
+    if (!connection) {
+      throw new ForbiddenException(
+        "This shop is not connected to your agency.",
+      );
+    }
+
+    // ------------------------------------------
+    // Return delivery days
+    // ------------------------------------------
+
+    return db
+      .select()
+      .from(deliverySlots)
+      .where(
+        and(
+          eq(
+            deliverySlots.agencyId,
+            agencyId,
+          ),
+          eq(
+            deliverySlots.shopId,
+            shopId,
+          ),
+        ),
+      );
+  }
+
+  // ==========================================
+  // SHOP → CONNECTED AGENCY DELIVERY DAYS
+  // ==========================================
+
+  async findByShop(
+    shopId: string,
+    user: any,
+  ) {
+    if (user.role !== "SHOP") {
+      throw new ForbiddenException(
+        "Only shops can access shop delivery days.",
+      );
+    }
+
+    // ------------------------------------------
+    // Get connected agencies
+    // ------------------------------------------
+
+    const connections =
+      await db
+        .select({
+          agencyId:
+            agencyShopConnections.agencyId,
+        })
+        .from(agencyShopConnections)
+        .where(
+          eq(
+            agencyShopConnections.shopId,
+            shopId,
+          ),
+        );
+
+    const agencyIds =
+      connections.map(
+        (connection) =>
+          connection.agencyId,
+      );
+
+    if (
+      agencyIds.length === 0
+    ) {
+      return [];
+    }
+
+    // ------------------------------------------
+    // Return active delivery days
+    // ------------------------------------------
+
+    return db
+      .select()
+      .from(deliverySlots)
+      .where(
+        and(
+          inArray(
+            deliverySlots.agencyId,
+            agencyIds,
+          ),
+          eq(
+            deliverySlots.shopId,
+            shopId,
+          ),
+          eq(
+            deliverySlots.isActive,
+            "true",
+          ),
+        ),
+      );
+  }
+
+  // ==========================================
+  // DELETE DELIVERY DAY
+  // AGENCY ONLY
+  // ==========================================
+
+  async remove(
+    id: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can delete delivery days.",
+      );
+    }
+
+    const deliveryDay =
+      await db.query.deliverySlots.findFirst({
+        where: eq(
+          deliverySlots.id,
+          id,
+        ),
+      });
+
+    if (!deliveryDay) {
+      throw new BadRequestException(
+        "Delivery day not found.",
+      );
+    }
+
+    // ------------------------------------------
+    // Verify agency ownership
+    // ------------------------------------------
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          deliveryDay.agencyId,
+        ),
+      });
+
+    if (
+      !agency ||
+      agency.userId !== user.id
+    ) {
+      throw new ForbiddenException(
+        "You can only delete your own agency delivery days.",
+      );
+    }
+
+    // ------------------------------------------
+    // Delete
+    // ------------------------------------------
+
+    await db
+      .delete(deliverySlots)
+      .where(
+        eq(
+          deliverySlots.id,
+          id,
+        ),
+      );
+
+    return {
+      success: true,
+
+      message:
+        "Delivery day deleted successfully.",
+    };
+  }
+}

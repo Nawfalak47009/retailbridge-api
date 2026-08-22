@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    "target": "ES2023",
+
+    "declaration": true,
+    "removeComments": true,
+
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+
+    "sourceMap": true,
+    "outDir": "./dist",
+
+    "incremental": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "strictNullChecks": true,
+
+    "forceConsistentCasingInFileNames": true,
+
+    "noImplicitAny": false,
+    "strictBindCallApply": false,
+    "noFallthroughCasesInSwitch": false
+  },
+
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
