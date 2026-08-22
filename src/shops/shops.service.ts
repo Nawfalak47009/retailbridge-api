@@ -203,6 +203,13 @@ export class ShopsService {
     }
 
     // ===================================
+    // TOTAL AGENCIES
+    // ===================================
+
+    const allAgencies =
+      await db.query.agencies.findMany();
+
+    // ===================================
     // CONNECTED AGENCIES
     // ===================================
 
@@ -241,8 +248,23 @@ export class ShopsService {
       shop,
 
       stats: {
+        // =================================
+        // AGENCY STATISTICS
+        // =================================
+
+        // All agencies registered
+        // in the system
+        totalAgencies:
+          allAgencies.length,
+
+        // Agencies connected
+        // to this shop
         connectedAgencies:
           connections.length,
+
+        // =================================
+        // ORDER STATISTICS
+        // =================================
 
         totalOrders:
           shopOrders.length,
@@ -261,6 +283,10 @@ export class ShopsService {
               "DELIVERED",
           ).length,
       },
+
+      // =================================
+      // RECENT ORDERS
+      // =================================
 
       recentOrders:
         shopOrders.slice(
