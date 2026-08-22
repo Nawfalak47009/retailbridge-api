@@ -7,7 +7,6 @@ import {
 import {
   eq,
   and,
-  sql,
 } from "drizzle-orm";
 
 import { db } from "../db";
@@ -350,8 +349,10 @@ export class AgencyConnectionsService {
       await db
         .insert(agencyShopConnections)
         .values({
-          agencyId: request.agencyId,
-          shopId: request.shopId,
+          agencyId:
+            request.agencyId,
+          shopId:
+            request.shopId,
         });
     }
 
@@ -469,11 +470,19 @@ export class AgencyConnectionsService {
     shopId: string,
     user: any,
   ) {
+    // ------------------------------------------
+    // Verify role
+    // ------------------------------------------
+
     if (user.role !== "SHOP") {
       throw new ForbiddenException(
         "Only shops can access their agencies.",
       );
     }
+
+    // ------------------------------------------
+    // Verify shop
+    // ------------------------------------------
 
     const shop =
       await db.query.shops.findFirst({
@@ -483,9 +492,131 @@ export class AgencyConnectionsService {
         ),
       });
 
-    if (!shop || shop.userId !== user.id) {
+    if (!shop) {
+      throw new BadRequestException(
+        "Shop not found.",
+      );
+    }
+
+    if (shop.userId !== user.id) {
       throw new ForbiddenException(
         "You can only access your own agencies.",
+      );
+    }
+
+    // ------------------------------------------
+    // Get connections
+    // ------------------------------------------
+
+    const connections =
+      await db
+        .select({
+          connectionId:
+            agencyShopConnections.id,
+
+          agencyId:
+            agencyShopConnections.agencyId,
+
+          connectedAt:
+            agencyShopConnections.connectedAt,
+        })
+        .from(
+          agencyShopConnections,
+        )
+        .where(
+          eq(
+            agencyShopConnections.shopId,
+            shopId,
+          ),
+        );
+
+    // ------------------------------------------
+    // No connections
+    // ------------------------------------------
+
+    if (connections.length === 0) {
+      return [];
+    }
+
+    // ------------------------------------------
+    // Load agency details
+    // ------------------------------------------
+
+    const result: Array<{
+      connectionId: string;
+      agencyId: string;
+      agencyName: string;
+      ownerName: string;
+      phone: string;
+      connectedAt: Date | null;
+    }> = [];
+
+    for (const connection of connections) {
+      const agency =
+        await db.query.agencies.findFirst({
+          where: eq(
+            agencies.id,
+            connection.agencyId,
+          ),
+        });
+
+      // Ignore stale connection records.
+      if (!agency) {
+        continue;
+      }
+
+      result.push({
+        connectionId:
+          connection.connectionId,
+
+        agencyId:
+          agency.id,
+
+        agencyName:
+          agency.agencyName,
+
+        ownerName:
+          agency.ownerName,
+
+        phone:
+          agency.phone,
+
+        connectedAt:
+          connection.connectedAt,
+      });
+    }
+
+    return result;
+  }
+
+  // ==========================================
+  // AGENCY → MY SHOPS
+  // ==========================================
+
+  async getMyShops(
+    agencyId: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can access their shops.",
+      );
+    }
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(
+          agencies.id,
+          agencyId,
+        ),
+      });
+
+    if (
+      !agency ||
+      agency.userId !== user.id
+    ) {
+      throw new ForbiddenException(
+        "You can only access your own shops.",
       );
     }
 
@@ -494,105 +625,42 @@ export class AgencyConnectionsService {
         connectionId:
           agencyShopConnections.id,
 
-        agencyId:
-          agencies.id,
+        shopId:
+          shops.id,
 
-        agencyName:
-          agencies.agencyName,
+        shopName:
+          shops.shopName,
 
         ownerName:
-          agencies.ownerName,
+          shops.ownerName,
 
         phone:
-          agencies.phone,
+          shops.phone,
+
+        address:
+          shops.address,
+
+        pincode:
+          shops.pincode,
 
         connectedAt:
           agencyShopConnections.connectedAt,
       })
-      .from(agencyShopConnections)
+      .from(
+        agencyShopConnections,
+      )
       .innerJoin(
-  shops,
-  sql`${agencyShopConnections.shopId}::uuid = ${shops.id}`,
-)
-      .where(
+        shops,
         eq(
           agencyShopConnections.shopId,
-          shopId,
+          shops.id,
+        ),
+      )
+      .where(
+        eq(
+          agencyShopConnections.agencyId,
+          agencyId,
         ),
       );
   }
-
-  // ==========================================
-  // AGENCY → MY SHOPS
-  // ==========================================
-
-  // ==========================================
-// AGENCY → MY SHOPS
-// ==========================================
-
-async getMyShops(
-  agencyId: string,
-  user: any,
-) {
-  if (user.role !== "AGENCY") {
-    throw new ForbiddenException(
-      "Only agencies can access their shops.",
-    );
-  }
-
-  const agency =
-    await db.query.agencies.findFirst({
-      where: eq(
-        agencies.id,
-        agencyId,
-      ),
-    });
-
-  if (
-    !agency ||
-    agency.userId !== user.id
-  ) {
-    throw new ForbiddenException(
-      "You can only access your own shops.",
-    );
-  }
-
-  return db
-    .select({
-      connectionId:
-        agencyShopConnections.id,
-
-      shopId:
-        shops.id,
-
-      shopName:
-        shops.shopName,
-
-      ownerName:
-        shops.ownerName,
-
-      phone:
-        shops.phone,
-
-      address:
-        shops.address,
-
-      pincode:
-        shops.pincode,
-
-      connectedAt:
-        agencyShopConnections.connectedAt,
-    })
-    .from(agencyShopConnections)
-    .innerJoin(
-      shops,
-      sql`${agencyShopConnections.shopId}::uuid = ${shops.id}`,
-    )
-    .where(
-      eq(
-        agencyShopConnections.agencyId,
-        agencyId,
-      ),
-    );
-}
 }
