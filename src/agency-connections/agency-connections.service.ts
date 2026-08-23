@@ -31,7 +31,10 @@ export class AgencyConnectionsService {
     dto: CreateRequestDto,
     user: any,
   ) {
-    // SHOP is requesting
+    // ==========================================
+    // SHOP IS REQUESTING
+    // ==========================================
+
     if (dto.requestedBy === "SHOP") {
       if (user.role !== "SHOP") {
         throw new ForbiddenException(
@@ -60,7 +63,10 @@ export class AgencyConnectionsService {
       }
     }
 
-    // AGENCY is requesting
+    // ==========================================
+    // AGENCY IS REQUESTING
+    // ==========================================
+
     if (dto.requestedBy === "AGENCY") {
       if (user.role !== "AGENCY") {
         throw new ForbiddenException(
@@ -89,6 +95,10 @@ export class AgencyConnectionsService {
       }
     }
 
+    // ==========================================
+    // CHECK EXISTING PENDING REQUEST
+    // ==========================================
+
     const existingRequest =
       await db.query.agencyShopRequests.findFirst({
         where: and(
@@ -113,6 +123,10 @@ export class AgencyConnectionsService {
       );
     }
 
+    // ==========================================
+    // CHECK EXISTING CONNECTION
+    // ==========================================
+
     const existingConnection =
       await db.query.agencyShopConnections.findFirst({
         where: and(
@@ -133,21 +147,34 @@ export class AgencyConnectionsService {
       );
     }
 
+    // ==========================================
+    // CREATE REQUEST
+    // ==========================================
+
     const [request] =
       await db
         .insert(agencyShopRequests)
         .values({
-          agencyId: dto.agencyId,
-          shopId: dto.shopId,
-          requestedBy: dto.requestedBy,
-          status: "PENDING",
+          agencyId:
+            dto.agencyId,
+
+          shopId:
+            dto.shopId,
+
+          requestedBy:
+            dto.requestedBy,
+
+          status:
+            "PENDING",
         })
         .returning();
 
     return {
       success: true,
+
       message:
         "Connection request sent successfully.",
+
       request,
     };
   }
@@ -290,8 +317,13 @@ export class AgencyConnectionsService {
       );
     }
 
-    // Only the receiving side can accept
-    if (request.requestedBy === "SHOP") {
+    // ==========================================
+    // SHOP REQUEST → AGENCY ACCEPTS
+    // ==========================================
+
+    if (
+      request.requestedBy === "SHOP"
+    ) {
       const agency =
         await db.query.agencies.findFirst({
           where: eq(
@@ -311,7 +343,13 @@ export class AgencyConnectionsService {
       }
     }
 
-    if (request.requestedBy === "AGENCY") {
+    // ==========================================
+    // AGENCY REQUEST → SHOP ACCEPTS
+    // ==========================================
+
+    if (
+      request.requestedBy === "AGENCY"
+    ) {
       const shop =
         await db.query.shops.findFirst({
           where: eq(
@@ -331,6 +369,10 @@ export class AgencyConnectionsService {
       }
     }
 
+    // ==========================================
+    // CHECK EXISTING CONNECTION
+    // ==========================================
+
     const existingConnection =
       await db.query.agencyShopConnections.findFirst({
         where: and(
@@ -345,21 +387,31 @@ export class AgencyConnectionsService {
         ),
       });
 
+    // ==========================================
+    // CREATE CONNECTION
+    // ==========================================
+
     if (!existingConnection) {
       await db
         .insert(agencyShopConnections)
         .values({
           agencyId:
             request.agencyId,
+
           shopId:
             request.shopId,
         });
     }
 
+    // ==========================================
+    // UPDATE REQUEST
+    // ==========================================
+
     await db
       .update(agencyShopRequests)
       .set({
-        status: "ACCEPTED",
+        status:
+          "ACCEPTED",
       })
       .where(
         eq(
@@ -370,6 +422,7 @@ export class AgencyConnectionsService {
 
     return {
       success: true,
+
       message:
         "Connection request accepted.",
     };
@@ -403,7 +456,13 @@ export class AgencyConnectionsService {
       );
     }
 
-    if (request.requestedBy === "SHOP") {
+    // ==========================================
+    // SHOP REQUEST → AGENCY REJECTS
+    // ==========================================
+
+    if (
+      request.requestedBy === "SHOP"
+    ) {
       const agency =
         await db.query.agencies.findFirst({
           where: eq(
@@ -423,7 +482,13 @@ export class AgencyConnectionsService {
       }
     }
 
-    if (request.requestedBy === "AGENCY") {
+    // ==========================================
+    // AGENCY REQUEST → SHOP REJECTS
+    // ==========================================
+
+    if (
+      request.requestedBy === "AGENCY"
+    ) {
       const shop =
         await db.query.shops.findFirst({
           where: eq(
@@ -443,10 +508,15 @@ export class AgencyConnectionsService {
       }
     }
 
+    // ==========================================
+    // UPDATE REQUEST
+    // ==========================================
+
     await db
       .update(agencyShopRequests)
       .set({
-        status: "REJECTED",
+        status:
+          "REJECTED",
       })
       .where(
         eq(
@@ -457,6 +527,7 @@ export class AgencyConnectionsService {
 
     return {
       success: true,
+
       message:
         "Connection request rejected.",
     };
@@ -551,7 +622,9 @@ export class AgencyConnectionsService {
       connectedAt: Date | null;
     }> = [];
 
-    for (const connection of connections) {
+    for (
+      const connection of connections
+    ) {
       const agency =
         await db.query.agencies.findFirst({
           where: eq(
@@ -560,7 +633,7 @@ export class AgencyConnectionsService {
           ),
         });
 
-      // Ignore stale connection records.
+      // Ignore stale connection records
       if (!agency) {
         continue;
       }
@@ -597,11 +670,19 @@ export class AgencyConnectionsService {
     agencyId: string,
     user: any,
   ) {
+    // ------------------------------------------
+    // Verify role
+    // ------------------------------------------
+
     if (user.role !== "AGENCY") {
       throw new ForbiddenException(
         "Only agencies can access their shops.",
       );
     }
+
+    // ------------------------------------------
+    // Verify agency
+    // ------------------------------------------
 
     const agency =
       await db.query.agencies.findFirst({
@@ -611,56 +692,96 @@ export class AgencyConnectionsService {
         ),
       });
 
-    if (
-      !agency ||
-      agency.userId !== user.id
-    ) {
+    if (!agency) {
+      throw new BadRequestException(
+        "Agency not found.",
+      );
+    }
+
+    if (agency.userId !== user.id) {
       throw new ForbiddenException(
         "You can only access your own shops.",
       );
     }
 
-    return db
-      .select({
-        connectionId:
-          agencyShopConnections.id,
+    // ------------------------------------------
+    // Get connections
+    // ------------------------------------------
 
-        shopId:
-          shops.id,
-
-        shopName:
-          shops.shopName,
-
-        ownerName:
-          shops.ownerName,
-
-        phone:
-          shops.phone,
-
-        address:
-          shops.address,
-
-        pincode:
-          shops.pincode,
-
-        connectedAt:
-          agencyShopConnections.connectedAt,
-      })
-      .from(
-        agencyShopConnections,
-      )
-      .innerJoin(
-        shops,
-        eq(
-          agencyShopConnections.shopId,
-          shops.id,
-        ),
-      )
-      .where(
-        eq(
+    const connections =
+      await db.query.agencyShopConnections.findMany({
+        where: eq(
           agencyShopConnections.agencyId,
           agencyId,
         ),
-      );
+      });
+
+    // ------------------------------------------
+    // No connections
+    // ------------------------------------------
+
+    if (connections.length === 0) {
+      return [];
+    }
+
+    // ------------------------------------------
+    // Load shop details
+    // ------------------------------------------
+
+    const result: Array<{
+      connectionId: string;
+      shopId: string;
+      shopName: string;
+      ownerName: string;
+      phone: string;
+      address: string | null;
+      pincode: string | null;
+      connectedAt: Date | null;
+    }> = [];
+
+    for (
+      const connection of connections
+    ) {
+      const shop =
+        await db.query.shops.findFirst({
+          where: eq(
+            shops.id,
+            connection.shopId,
+          ),
+        });
+
+      // Ignore stale connection records
+      if (!shop) {
+        continue;
+      }
+
+      result.push({
+        connectionId:
+          connection.id,
+
+        shopId:
+          shop.id,
+
+        shopName:
+          shop.shopName,
+
+        ownerName:
+          shop.ownerName,
+
+        phone:
+          shop.phone,
+
+        address:
+          shop.address,
+
+        pincode:
+          shop.pincode,
+
+        connectedAt:
+          connection.connectedAt,
+      });
+    }
+
+    return result;
   }
 }
