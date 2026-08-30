@@ -16,6 +16,7 @@ import {
   deliverySlots,
   agencyShopConnections,
   agencies,
+  shops,
   orders,
 } from "../db/schema";
 
@@ -231,13 +232,29 @@ export class DeliverySlotsService {
         ),
       );
 
-    return slots.map((slot) => {
-      const nextDate = calculateNextDeliveryDate(slot, new Date());
-      return {
-        ...slot,
-        deliveryDate: nextDate,
-      };
-    });
+    return Promise.all(
+      slots.map(async (slot) => {
+        const nextDate = calculateNextDeliveryDate(slot, new Date());
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, slot.shopId),
+        });
+
+        return {
+          ...slot,
+          deliveryDate: nextDate,
+          shop: shop
+            ? {
+                id: shop.id,
+                shopName: shop.shopName,
+                ownerName: shop.ownerName,
+                phone: shop.phone,
+                address: shop.address,
+                pincode: shop.pincode,
+              }
+            : null,
+        };
+      }),
+    );
   }
 
   // ==========================================
