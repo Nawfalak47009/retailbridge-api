@@ -22,6 +22,7 @@ import {
 import {
   CreateDeliverySlotDto,
 } from "./dto/create-delivery-slot.dto";
+import { calculateNextDeliveryDate } from "./delivery-slots.utils";
 
 @Injectable()
 export class DeliverySlotsService {
@@ -360,7 +361,7 @@ export class DeliverySlotsService {
     // Return active delivery days
     // ------------------------------------------
 
-    return db
+    const activeSlots = await db
       .select()
       .from(deliverySlots)
       .where(
@@ -379,6 +380,14 @@ export class DeliverySlotsService {
           ),
         ),
       );
+
+    return activeSlots.map((slot) => {
+      const nextDate = calculateNextDeliveryDate(slot, new Date());
+      return {
+        ...slot,
+        deliveryDate: nextDate,
+      };
+    });
   }
 
   // ==========================================
@@ -499,11 +508,13 @@ export class DeliverySlotsService {
         ),
       );
 
-    // Filter slots for today or upcoming (or up to 7 days ahead)
-    const upcomingSlots = activeSlots.filter((slot) => {
-      const slotDate = new Date(slot.deliveryDate);
-      slotDate.setHours(23, 59, 59, 999);
-      return slotDate.getTime() >= today.getTime();
+    // Project slots for today or upcoming (next future delivery date)
+    const upcomingSlots = activeSlots.map((slot) => {
+      const nextDate = calculateNextDeliveryDate(slot, today);
+      return {
+        ...slot,
+        deliveryDate: nextDate,
+      };
     });
 
     if (upcomingSlots.length === 0) {

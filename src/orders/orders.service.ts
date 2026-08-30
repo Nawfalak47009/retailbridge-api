@@ -26,6 +26,7 @@ import { S3Service } from "../documents/s3.service";
 
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
+import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 
 @Injectable()
 export class OrdersService {
@@ -143,7 +144,6 @@ export class OrdersService {
     ) {
       const now =
         new Date();
-
       now.setHours(
         0,
         0,
@@ -154,39 +154,11 @@ export class OrdersService {
       for (
         const candidate of availableDeliveryDays
       ) {
-        if (
-          !candidate.deliveryDate
-        ) {
-          continue;
-        }
-
         const candidateDate =
-          new Date(
-            candidate.deliveryDate,
+          calculateNextDeliveryDate(
+            candidate,
+            now,
           );
-
-        if (
-          Number.isNaN(
-            candidateDate.getTime(),
-          )
-        ) {
-          continue;
-        }
-
-        candidateDate.setHours(
-          0,
-          0,
-          0,
-          0,
-        );
-
-        // Ignore dates that are already in the past.
-        if (
-          candidateDate.getTime() <
-          now.getTime()
-        ) {
-          continue;
-        }
 
         if (
           !selectedDeliveryDate ||
@@ -483,6 +455,23 @@ export class OrdersService {
           });
       }
 
+      let effectiveScheduledDate = order.scheduledDate;
+      if (
+        effectiveScheduledDate &&
+        order.createdAt &&
+        order.status !== "DELIVERED" &&
+        order.status !== "CANCELLED"
+      ) {
+        const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+        const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+        if (schedTime < createdTime && deliveryDay) {
+          effectiveScheduledDate = calculateNextDeliveryDate(
+            deliveryDay,
+            new Date(order.createdAt),
+          );
+        }
+      }
+
       response.push({
         id:
           order.id,
@@ -519,7 +508,7 @@ export class OrdersService {
           order.trackingMessage,
 
         scheduledDate:
-          order.scheduledDate,
+          effectiveScheduledDate,
 
         deliveryDay:
           deliveryDay
@@ -531,7 +520,7 @@ export class OrdersService {
                   deliveryDay.day,
 
                 deliveryDate:
-                  deliveryDay.deliveryDate,
+                  effectiveScheduledDate || deliveryDay.deliveryDate,
               }
             : null,
 
@@ -759,6 +748,23 @@ if (order.slotId) {
     });
 }
 
+      let effectiveScheduledDate = order.scheduledDate;
+      if (
+        effectiveScheduledDate &&
+        order.createdAt &&
+        order.status !== "DELIVERED" &&
+        order.status !== "CANCELLED"
+      ) {
+        const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+        const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+        if (schedTime < createdTime && deliveryDay) {
+          effectiveScheduledDate = calculateNextDeliveryDate(
+            deliveryDay,
+            new Date(order.createdAt),
+          );
+        }
+      }
+
       response.push({
         id:
           order.id,
@@ -795,7 +801,7 @@ if (order.slotId) {
           order.trackingMessage,
 
         scheduledDate:
-          order.scheduledDate,
+          effectiveScheduledDate,
 
         deliveryDay:
           deliveryDay
@@ -807,7 +813,7 @@ if (order.slotId) {
                   deliveryDay.day,
 
                 deliveryDate:
-                  deliveryDay.deliveryDate,
+                  effectiveScheduledDate || deliveryDay.deliveryDate,
               }
             : null,
 
@@ -1078,9 +1084,22 @@ if (order.slotId) {
     });
 }
 
-    // ==========================================
-    // RESPONSE
-    // ==========================================
+    let effectiveScheduledDate = order.scheduledDate;
+    if (
+      effectiveScheduledDate &&
+      order.createdAt &&
+      order.status !== "DELIVERED" &&
+      order.status !== "CANCELLED"
+    ) {
+      const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+      const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+      if (schedTime < createdTime && deliveryDay) {
+        effectiveScheduledDate = calculateNextDeliveryDate(
+          deliveryDay,
+          new Date(order.createdAt),
+        );
+      }
+    }
 
     return {
       id:
@@ -1102,7 +1121,7 @@ if (order.slotId) {
         order.acceptedAt,
 
       scheduledDate:
-        order.scheduledDate,
+        effectiveScheduledDate,
 
       deliveryDay:
         deliveryDay
@@ -1114,7 +1133,7 @@ if (order.slotId) {
                 deliveryDay.day,
 
               deliveryDate:
-                deliveryDay.deliveryDate,
+                effectiveScheduledDate || deliveryDay.deliveryDate,
             }
           : null,
 

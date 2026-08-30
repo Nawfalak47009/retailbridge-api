@@ -28,6 +28,7 @@ import {
 
 import { CheckoutDto } from "./dto/checkout.dto";
 import { AddCartDto } from "./dto/add-cart.dto";
+import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 
 @Injectable()
 export class CartService {
@@ -689,34 +690,16 @@ export class CartService {
         });
 
       // ========================================
-      // DETERMINE DELIVERY DATE
+      // DETERMINE DELIVERY DATE (NEXT FUTURE OCCURRENCE)
       // ========================================
 
       let scheduledDate:
         Date | null = null;
 
       if (deliveryDay) {
-        scheduledDate =
-          new Date(
-            deliveryDay.deliveryDate,
-          );
-
-        if (
-          Number.isNaN(
-            scheduledDate.getTime(),
-          )
-        ) {
-          throw new BadRequestException(
-            "The agency delivery day contains an invalid delivery date.",
-          );
-        }
-
-        // Normalize to midnight
-        scheduledDate.setHours(
-          0,
-          0,
-          0,
-          0,
+        scheduledDate = calculateNextDeliveryDate(
+          deliveryDay,
+          new Date(),
         );
       }
 

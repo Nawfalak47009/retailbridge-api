@@ -18,7 +18,7 @@ import {
 } from "../db/schema";
 
 import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
-
+import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 import { S3Service } from "../documents/s3.service";
 
 @Injectable()
@@ -269,12 +269,43 @@ export class ShopsService {
           "DELIVERED",
       ).length;
 
+    // Active slots for connected agencies
+    const connectedAgencyIds = connections.map((c) => c.agencyId);
+    let activeSlots: any[] = [];
+    if (connectedAgencyIds.length > 0) {
+      activeSlots = await db
+        .select()
+        .from(deliverySlots)
+        .where(
+          and(
+            inArray(deliverySlots.agencyId, connectedAgencyIds),
+            eq(deliverySlots.shopId, shop.id),
+            eq(deliverySlots.isActive, "true"),
+          ),
+        );
+    }
+
     const now = Date.now();
     const lateOrdersCount = shopOrders.filter((order) => {
       const isDelivered = order.status === "DELIVERED";
       const isCancelled = order.status === "CANCELLED";
       if (!isDelivered && !isCancelled && order.scheduledDate) {
-        const scheduledDateTime = new Date(order.scheduledDate);
+        let scheduledDateTime = new Date(order.scheduledDate);
+        if (order.createdAt) {
+          const schedTime = new Date(order.scheduledDate).setHours(0, 0, 0, 0);
+          const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+          if (schedTime < createdTime) {
+            const slot = activeSlots.find(
+              (s) => s.id === order.slotId || s.agencyId === order.agencyId,
+            );
+            if (slot) {
+              scheduledDateTime = calculateNextDeliveryDate(
+                slot,
+                new Date(order.createdAt),
+              );
+            }
+          }
+        }
         scheduledDateTime.setHours(23, 59, 59, 999);
         return scheduledDateTime.getTime() < now;
       }
@@ -288,28 +319,18 @@ export class ShopsService {
     // ===================================
     // SLOT REMINDERS (Active slots without order)
     // ===================================
-    const connectedAgencyIds = connections.map((c) => c.agencyId);
     const slotReminders: any[] = [];
 
     if (connectedAgencyIds.length > 0) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const activeSlots = await db
-        .select()
-        .from(deliverySlots)
-        .where(
-          and(
-            inArray(deliverySlots.agencyId, connectedAgencyIds),
-            eq(deliverySlots.shopId, shop.id),
-            eq(deliverySlots.isActive, "true"),
-          ),
-        );
-
-      const upcomingSlots = activeSlots.filter((slot) => {
-        const slotDate = new Date(slot.deliveryDate);
-        slotDate.setHours(23, 59, 59, 999);
-        return slotDate.getTime() >= today.getTime();
+      const upcomingSlots = activeSlots.map((slot) => {
+        const nextDate = calculateNextDeliveryDate(slot, today);
+        return {
+          ...slot,
+          deliveryDate: nextDate,
+        };
       });
 
       for (const slot of upcomingSlots) {
