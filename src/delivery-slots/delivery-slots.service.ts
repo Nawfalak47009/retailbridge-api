@@ -221,7 +221,7 @@ export class DeliverySlotsService {
       );
     }
 
-    return db
+    const slots = await db
       .select()
       .from(deliverySlots)
       .where(
@@ -230,6 +230,14 @@ export class DeliverySlotsService {
           agencyId,
         ),
       );
+
+    return slots.map((slot) => {
+      const nextDate = calculateNextDeliveryDate(slot, new Date());
+      return {
+        ...slot,
+        deliveryDate: nextDate,
+      };
+    });
   }
 
   // ==========================================
@@ -296,7 +304,7 @@ export class DeliverySlotsService {
     // Return delivery days
     // ------------------------------------------
 
-    return db
+    const slots = await db
       .select()
       .from(deliverySlots)
       .where(
@@ -311,6 +319,14 @@ export class DeliverySlotsService {
           ),
         ),
       );
+
+    return slots.map((slot) => {
+      const nextDate = calculateNextDeliveryDate(slot, new Date());
+      return {
+        ...slot,
+        deliveryDate: nextDate,
+      };
+    });
   }
 
   // ==========================================
