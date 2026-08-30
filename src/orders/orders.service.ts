@@ -557,6 +557,9 @@ export class OrdersService {
 
         items:
           productsData,
+
+        products:
+          productsData,
       });
     }
 
@@ -1222,6 +1225,9 @@ if (order.slotId) {
         },
 
       items:
+        productsData,
+
+      products:
         productsData,
     };
   }
