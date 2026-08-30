@@ -722,7 +722,8 @@ export class CartService {
       }
 
       // ========================================
-      // CALCULATE TOTAL (Cases + Loose Units)
+      // ========================================
+      // VALIDATE STOCK & CALCULATE TOTAL
       // ========================================
 
       let totalAmount = 0;
@@ -744,10 +745,21 @@ export class CartService {
           );
         }
 
+        const currentStockCases =
+          Math.max(0, parseInt(product.stock, 10) || 0);
         const unitsPerCase =
           parseInt(product.quantityPerUnit, 10) || 1;
+        const availableUnits =
+          currentStockCases * unitsPerCase;
         const totalUnits =
           Number(item.quantity) || 0;
+
+        if (totalUnits > availableUnits) {
+          throw new BadRequestException(
+            `Insufficient stock for "${product.name}". Available: ${currentStockCases} case(s) (${availableUnits} units), requested: ${totalUnits} units.`,
+          );
+        }
+
         const casesCount =
           Math.floor(totalUnits / unitsPerCase);
         const looseCount =
@@ -821,7 +833,7 @@ export class CartService {
           .returning();
 
       // ========================================
-      // CREATE ORDER ITEMS (Cases + Loose)
+      // CREATE ORDER ITEMS & REDUCE STOCK
       // ========================================
 
       for (
@@ -860,6 +872,30 @@ export class CartService {
             extraQuantity:
               String(looseCount),
           });
+
+        // Professionally deduct ordered stock cases from inventory
+        if (product) {
+          const currentStockCases =
+            Math.max(0, parseInt(product.stock, 10) || 0);
+          const availableUnits =
+            currentStockCases * unitsPerCase;
+          const remainingUnits =
+            Math.max(0, availableUnits - totalUnits);
+          const remainingCases =
+            Math.floor(remainingUnits / unitsPerCase);
+
+          await db
+            .update(products)
+            .set({
+              stock: String(remainingCases),
+            })
+            .where(
+              eq(
+                products.id,
+                product.id,
+              ),
+            );
+        }
       }
 
       // ========================================

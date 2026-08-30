@@ -1433,6 +1433,62 @@ if (order.slotId) {
     }
 
     // ==========================================
+    // CANCELLED - RESTORE PRODUCT STOCK
+    // ==========================================
+
+    if (
+      dto.status === "CANCELLED" &&
+      order.status !== "CANCELLED"
+    ) {
+      const itemsToRestore =
+        await db.query.orderItems.findMany({
+          where: eq(
+            orderItems.orderId,
+            order.id,
+          ),
+        });
+
+      for (const item of itemsToRestore) {
+        const product =
+          await db.query.products.findFirst({
+            where: eq(
+              products.id,
+              item.productId,
+            ),
+          });
+
+        if (product) {
+          const currentCases =
+            Math.max(0, parseInt(product.stock, 10) || 0);
+          const unitsPerCase =
+            parseInt(product.quantityPerUnit, 10) || 1;
+          const cases =
+            Number(item.cases) || 0;
+          const loose =
+            Number(item.extraQuantity) || 0;
+          const totalUnitsToRestore =
+            (cases * unitsPerCase) + loose;
+          const newTotalUnits =
+            (currentCases * unitsPerCase) + totalUnitsToRestore;
+          const newCases =
+            Math.floor(newTotalUnits / unitsPerCase);
+
+          await db
+            .update(products)
+            .set({
+              stock: String(newCases),
+            })
+            .where(
+              eq(
+                products.id,
+                product.id,
+              ),
+            );
+        }
+      }
+    }
+
+    // ==========================================
     // UPDATE ORDER
     // ==========================================
 
