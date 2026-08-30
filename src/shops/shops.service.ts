@@ -3,7 +3,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 
 import { db } from "../db";
 
@@ -14,6 +14,7 @@ import {
   orderItems,
   products,
   agencyShopConnections,
+  deliverySlots,
 } from "../db/schema";
 
 import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
@@ -268,9 +269,104 @@ export class ShopsService {
           "DELIVERED",
       ).length;
 
+    const now = Date.now();
+    const lateOrdersCount = shopOrders.filter((order) => {
+      const isDelivered = order.status === "DELIVERED";
+      const isCancelled = order.status === "CANCELLED";
+      if (!isDelivered && !isCancelled && order.scheduledDate) {
+        const scheduledDateTime = new Date(order.scheduledDate);
+        scheduledDateTime.setHours(23, 59, 59, 999);
+        return scheduledDateTime.getTime() < now;
+      }
+      return false;
+    }).length;
+
     // 5 points / coins per successfully delivered order from DB
     const realRewardPoints =
       deliveredOrdersCount * 5;
+
+    // ===================================
+    // SLOT REMINDERS (Active slots without order)
+    // ===================================
+    const connectedAgencyIds = connections.map((c) => c.agencyId);
+    const slotReminders: any[] = [];
+
+    if (connectedAgencyIds.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const activeSlots = await db
+        .select()
+        .from(deliverySlots)
+        .where(
+          and(
+            inArray(deliverySlots.agencyId, connectedAgencyIds),
+            eq(deliverySlots.shopId, shop.id),
+            eq(deliverySlots.isActive, "true"),
+          ),
+        );
+
+      const upcomingSlots = activeSlots.filter((slot) => {
+        const slotDate = new Date(slot.deliveryDate);
+        slotDate.setHours(23, 59, 59, 999);
+        return slotDate.getTime() >= today.getTime();
+      });
+
+      for (const slot of upcomingSlots) {
+        const agency = allAgencies.find((a) => a.id === slot.agencyId);
+        const slotDate = new Date(slot.deliveryDate);
+        const slotDateEnd = new Date(slot.deliveryDate);
+        slotDateEnd.setHours(23, 59, 59, 999);
+
+        const existingOrder = shopOrders.find((ord) => {
+          if (ord.agencyId !== slot.agencyId) return false;
+          if (ord.status === "CANCELLED") return false;
+          if (ord.slotId && ord.slotId === slot.id) return true;
+
+          if (ord.scheduledDate) {
+            const ordSched = new Date(ord.scheduledDate);
+            if (
+              ordSched.getFullYear() === slotDate.getFullYear() &&
+              ordSched.getMonth() === slotDate.getMonth() &&
+              ordSched.getDate() === slotDate.getDate()
+            ) {
+              return true;
+            }
+          }
+
+          const ordCreated = new Date(ord.createdAt);
+          const slotCreated = new Date(slot.createdAt);
+          return ordCreated >= slotCreated && ordCreated <= slotDateEnd;
+        });
+
+        if (!existingOrder) {
+          const nowDate = new Date();
+          const diffMs = slotDateEnd.getTime() - nowDate.getTime();
+          const diffHours = Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
+          const isUrgent = diffHours <= 36;
+
+          const formattedDate = slotDate.toLocaleDateString("en-IN", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
+
+          slotReminders.push({
+            slotId: slot.id,
+            agencyId: slot.agencyId,
+            agencyName: agency?.agencyName || "Connected Agency",
+            agencyPhone: agency?.phone || "",
+            ownerName: agency?.ownerName || "",
+            deliveryDate: slot.deliveryDate,
+            day: slot.day,
+            formattedDate,
+            isUrgent,
+            hoursLeft: diffHours,
+            message: `Agency ${agency?.agencyName || "Wholesaler"} has scheduled delivery for ${slot.day} (${formattedDate}). Please place your order before cutoff!`,
+          });
+        }
+      }
+    }
 
     return {
       success: true,
@@ -302,6 +398,12 @@ export class ShopsService {
         totalOrders:
           shopOrders.length,
 
+        lateOrders:
+          lateOrdersCount,
+
+        notDeliveredOrders:
+          lateOrdersCount,
+
         pendingOrders:
           shopOrders.filter(
             (order) =>
@@ -317,6 +419,11 @@ export class ShopsService {
 
         pointsPerOrder: 5,
       },
+
+      // =================================
+      // ACTIVE SLOT ORDERING REMINDERS
+      // =================================
+      slotReminders,
 
       // =================================
       // RECENT ORDERS

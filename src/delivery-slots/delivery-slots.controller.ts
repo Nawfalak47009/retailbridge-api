@@ -85,6 +85,38 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
+  // SHOP → ACTIVE SLOT ORDERING REMINDERS
+  // ==========================================
+
+  @Get("shop/:shopId/reminders")
+  findRemindersByShop(
+    @Param("shopId")
+    shopId: string,
+
+    @Req()
+    req: any,
+  ) {
+    return this.deliverySlotsService.getShopSlotReminders(
+      shopId,
+      req.user,
+    );
+  }
+
+  @Get("reminders/shop/:shopId")
+  findRemindersByShopAlt(
+    @Param("shopId")
+    shopId: string,
+
+    @Req()
+    req: any,
+  ) {
+    return this.deliverySlotsService.getShopSlotReminders(
+      shopId,
+      req.user,
+    );
+  }
+
+  // ==========================================
   // SHOP → ITS DELIVERY DAYS
   // ==========================================
 

@@ -16,6 +16,7 @@ import {
   deliverySlots,
   agencyShopConnections,
   agencies,
+  orders,
 } from "../db/schema";
 
 import {
@@ -449,5 +450,148 @@ export class DeliverySlotsService {
       message:
         "Delivery day deleted successfully.",
     };
+  }
+
+  // ==========================================
+  // SHOP → ACTIVE SLOT ORDERING REMINDERS
+  // ==========================================
+
+  async getShopSlotReminders(
+    shopId: string,
+    user?: any,
+  ) {
+    if (user && user.role !== "SHOP") {
+      throw new ForbiddenException(
+        "Only shops can access slot reminders.",
+      );
+    }
+
+    // ------------------------------------------
+    // Get connected agencies
+    // ------------------------------------------
+
+    const connections = await db
+      .select({
+        agencyId: agencyShopConnections.agencyId,
+      })
+      .from(agencyShopConnections)
+      .where(eq(agencyShopConnections.shopId, shopId));
+
+    const agencyIds = connections.map((c) => c.agencyId);
+    if (agencyIds.length === 0) {
+      return [];
+    }
+
+    // ------------------------------------------
+    // Find active future/today delivery slots
+    // ------------------------------------------
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const activeSlots = await db
+      .select()
+      .from(deliverySlots)
+      .where(
+        and(
+          inArray(deliverySlots.agencyId, agencyIds),
+          eq(deliverySlots.shopId, shopId),
+          eq(deliverySlots.isActive, "true"),
+        ),
+      );
+
+    // Filter slots for today or upcoming (or up to 7 days ahead)
+    const upcomingSlots = activeSlots.filter((slot) => {
+      const slotDate = new Date(slot.deliveryDate);
+      slotDate.setHours(23, 59, 59, 999);
+      return slotDate.getTime() >= today.getTime();
+    });
+
+    if (upcomingSlots.length === 0) {
+      return [];
+    }
+
+    // ------------------------------------------
+    // Get shop orders to check if order already placed
+    // ------------------------------------------
+    const shopOrders = await db.query.orders.findMany({
+      where: eq(orders.shopId, shopId),
+    });
+
+    // ------------------------------------------
+    // Map reminders
+    // ------------------------------------------
+    const reminders: any[] = [];
+
+    for (const slot of upcomingSlots) {
+      const agency = await db.query.agencies.findFirst({
+        where: eq(agencies.id, slot.agencyId),
+      });
+
+      const slotDate = new Date(slot.deliveryDate);
+      const slotDateEnd = new Date(slot.deliveryDate);
+      slotDateEnd.setHours(23, 59, 59, 999);
+
+      // Check if there is an active order placed for this agency & delivery slot
+      const existingOrder = shopOrders.find((ord) => {
+        if (ord.agencyId !== slot.agencyId) return false;
+        if (ord.status === "CANCELLED") return false;
+
+        // Matches slotId or matches scheduledDate on the same day
+        if (ord.slotId && ord.slotId === slot.id) return true;
+
+        if (ord.scheduledDate) {
+          const ordSched = new Date(ord.scheduledDate);
+          if (
+            ordSched.getFullYear() === slotDate.getFullYear() &&
+            ordSched.getMonth() === slotDate.getMonth() &&
+            ordSched.getDate() === slotDate.getDate()
+          ) {
+            return true;
+          }
+        }
+
+        // Or placed after slot creation and pending/accepted/scheduled
+        const ordCreated = new Date(ord.createdAt);
+        const slotCreated = new Date(slot.createdAt);
+        if (ordCreated >= slotCreated && ordCreated <= slotDateEnd) {
+          return true;
+        }
+
+        return false;
+      });
+
+      // If already ordered, don't show pending order reminder
+      if (existingOrder) {
+        continue;
+      }
+
+      // Calculate time remaining until cutoff
+      const now = new Date();
+      const diffMs = slotDateEnd.getTime() - now.getTime();
+      const diffHours = Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
+      const isUrgent = diffHours <= 36; // Within 1.5 days
+
+      const formattedDate = slotDate.toLocaleDateString("en-IN", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+
+      reminders.push({
+        slotId: slot.id,
+        agencyId: slot.agencyId,
+        agencyName: agency?.agencyName || "Connected Agency",
+        agencyPhone: agency?.phone || "",
+        ownerName: agency?.ownerName || "",
+        deliveryDate: slot.deliveryDate,
+        day: slot.day,
+        formattedDate,
+        isUrgent,
+        hoursLeft: diffHours,
+        message: `Agency ${agency?.agencyName || "Wholesaler"} has scheduled delivery for ${slot.day} (${formattedDate}). Please place your grocery order before the slot closes!`,
+      });
+    }
+
+    return reminders;
   }
 }
