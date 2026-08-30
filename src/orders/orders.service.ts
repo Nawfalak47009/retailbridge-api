@@ -497,7 +497,8 @@ export class OrdersService {
         remarks:
           order.remarks,
 
-        totalAmount,
+        totalAmount:
+          totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
 
         totalQuantity,
 
@@ -1181,7 +1182,8 @@ if (order.slotId) {
 
       totalQuantity,
 
-      totalAmount,
+      totalAmount:
+        totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
 
       agency:
         agency && {
