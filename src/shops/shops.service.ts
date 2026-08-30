@@ -129,14 +129,18 @@ export class ShopsService {
   }
 
   // =====================================
-  // Update Address
+  // Update Address & Store Details
   // =====================================
 
   async updateAddress(
     userId: string,
     body: {
-      address: string;
-      pincode: string;
+      address?: string;
+      pincode?: string;
+      shopName?: string;
+      ownerName?: string;
+      phone?: string;
+      landmark?: string;
     },
   ) {
     const shop =
@@ -153,16 +157,17 @@ export class ShopsService {
       );
     }
 
+    const updateFields: any = {};
+    if (body.address !== undefined) updateFields.address = body.address.trim();
+    if (body.pincode !== undefined) updateFields.pincode = body.pincode.trim();
+    if (body.shopName !== undefined && body.shopName.trim()) updateFields.shopName = body.shopName.trim();
+    if (body.ownerName !== undefined && body.ownerName.trim()) updateFields.ownerName = body.ownerName.trim();
+    if (body.phone !== undefined && body.phone.trim()) updateFields.phone = body.phone.trim();
+
     const [updated] =
       await db
         .update(shops)
-        .set({
-          address:
-            body.address,
-
-          pincode:
-            body.pincode,
-        })
+        .set(updateFields)
         .where(
           eq(
             shops.id,
@@ -173,10 +178,8 @@ export class ShopsService {
 
     return {
       success: true,
-
       message:
-        "Address updated successfully.",
-
+        "Store details and delivery address updated successfully.",
       shop: updated,
     };
   }

@@ -66,7 +66,7 @@ export class ShopsController {
   }
 
   // =====================================
-  // Update Shop Address
+  // Update Shop Address & Store Details
   // =====================================
 
   @Patch("profile/address")
@@ -79,8 +79,11 @@ export class ShopsController {
     @CurrentUser() user: JwtUser,
     @Body()
     body: {
-      address: string;
-      pincode: string;
+      address?: string;
+      pincode?: string;
+      shopName?: string;
+      ownerName?: string;
+      phone?: string;
       landmark?: string;
     },
   ) {
