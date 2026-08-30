@@ -479,6 +479,15 @@ export class OrdersService {
         orderNumber:
           order.orderNumber,
 
+        shopId:
+          order.shopId,
+
+        agencyId:
+          order.agencyId,
+
+        slotId:
+          order.slotId,
+
         status:
           order.status,
 
@@ -1107,6 +1116,15 @@ if (order.slotId) {
 
       orderNumber:
         order.orderNumber,
+
+      shopId:
+        order.shopId,
+
+      agencyId:
+        order.agencyId,
+
+      slotId:
+        order.slotId,
 
       status:
         order.status,
