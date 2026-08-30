@@ -157,6 +157,10 @@ export const products = pgTable(
       length: 50,
     }).notNull(),
 
+    loosePrice: varchar({
+      length: 50,
+    }),
+
     stock: varchar({
       length: 50,
     }).notNull(),

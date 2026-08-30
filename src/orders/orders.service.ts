@@ -376,22 +376,46 @@ export class OrdersService {
             .pop()!;
         }
 
-        const quantity =
-          Number(
-            item.cases,
-          );
+        const cases =
+          Number(item.cases) || 0;
+        const loose =
+          Number(item.extraQuantity) || 0;
+        const unitsPerCase =
+          parseInt(product.quantityPerUnit, 10) || 1;
+        const totalUnits =
+          (cases * unitsPerCase) + loose;
 
-        const price =
-          Number(
-            product.price,
+        const pricePerCase =
+          Number(product.price) || 0;
+        const pricePerUnit =
+          product.loosePrice && Number(product.loosePrice) > 0
+            ? Number(product.loosePrice)
+            : unitsPerCase > 1
+            ? Number((pricePerCase / unitsPerCase).toFixed(2))
+            : pricePerCase;
+
+        const itemSubtotal =
+          Math.round(
+            (cases * pricePerCase) +
+            (loose * pricePerUnit),
           );
 
         totalAmount +=
-          quantity *
-          price;
+          itemSubtotal;
 
         totalQuantity +=
-          quantity;
+          totalUnits;
+
+        let packBreakdown = "";
+        if (cases > 0 && loose > 0) {
+          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
+        } else if (cases > 0) {
+          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
+        } else if (loose > 0) {
+          packBreakdown = `${loose} Loose`;
+        } else {
+          packBreakdown = `${cases} Cases`;
+        }
 
         productsData.push({
           id:
@@ -405,13 +429,21 @@ export class OrdersService {
               key,
             ),
 
-          quantity,
+          quantity: totalUnits,
+          cases,
+          extraQuantity: loose,
+          loose,
+          unitsPerCase,
 
-          price,
+          price: pricePerCase,
+          pricePerCase,
+          pricePerUnit,
+          loosePrice: product.loosePrice,
 
           subtotal:
-            quantity *
-            price,
+            itemSubtotal,
+
+          packBreakdown,
 
           unit:
             product.unit,
@@ -622,22 +654,46 @@ export class OrdersService {
             .pop()!;
         }
 
-        const quantity =
-          Number(
-            item.cases,
-          );
+        const cases =
+          Number(item.cases) || 0;
+        const loose =
+          Number(item.extraQuantity) || 0;
+        const unitsPerCase =
+          parseInt(product.quantityPerUnit, 10) || 1;
+        const totalUnits =
+          (cases * unitsPerCase) + loose;
 
-        const price =
-          Number(
-            product.price,
+        const pricePerCase =
+          Number(product.price) || 0;
+        const pricePerUnit =
+          product.loosePrice && Number(product.loosePrice) > 0
+            ? Number(product.loosePrice)
+            : unitsPerCase > 1
+            ? Number((pricePerCase / unitsPerCase).toFixed(2))
+            : pricePerCase;
+
+        const itemSubtotal =
+          Math.round(
+            (cases * pricePerCase) +
+            (loose * pricePerUnit),
           );
 
         totalAmount +=
-          quantity *
-          price;
+          itemSubtotal;
 
         totalQuantity +=
-          quantity;
+          totalUnits;
+
+        let packBreakdown = "";
+        if (cases > 0 && loose > 0) {
+          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
+        } else if (cases > 0) {
+          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
+        } else if (loose > 0) {
+          packBreakdown = `${loose} Loose`;
+        } else {
+          packBreakdown = `${cases} Cases`;
+        }
 
         productsData.push({
           id:
@@ -651,13 +707,21 @@ export class OrdersService {
               key,
             ),
 
-          quantity,
+          quantity: totalUnits,
+          cases,
+          extraQuantity: loose,
+          loose,
+          unitsPerCase,
 
-          price,
+          price: pricePerCase,
+          pricePerCase,
+          pricePerUnit,
+          loosePrice: product.loosePrice,
 
           subtotal:
-            quantity *
-            price,
+            itemSubtotal,
+
+          packBreakdown,
 
           unit:
             product.unit,
@@ -909,22 +973,46 @@ if (order.slotId) {
           .pop()!;
       }
 
-      const quantity =
-        Number(
-          item.cases,
-        );
+      const cases =
+        Number(item.cases) || 0;
+      const loose =
+        Number(item.extraQuantity) || 0;
+      const unitsPerCase =
+        parseInt(product.quantityPerUnit, 10) || 1;
+      const totalUnits =
+        (cases * unitsPerCase) + loose;
 
-      const price =
-        Number(
-          product.price,
+      const pricePerCase =
+        Number(product.price) || 0;
+      const pricePerUnit =
+        product.loosePrice && Number(product.loosePrice) > 0
+          ? Number(product.loosePrice)
+          : unitsPerCase > 1
+          ? Number((pricePerCase / unitsPerCase).toFixed(2))
+          : pricePerCase;
+
+      const itemSubtotal =
+        Math.round(
+          (cases * pricePerCase) +
+          (loose * pricePerUnit),
         );
 
       totalAmount +=
-        quantity *
-        price;
+        itemSubtotal;
 
       totalQuantity +=
-        quantity;
+        totalUnits;
+
+      let packBreakdown = "";
+      if (cases > 0 && loose > 0) {
+        packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
+      } else if (cases > 0) {
+        packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
+      } else if (loose > 0) {
+        packBreakdown = `${loose} Loose`;
+      } else {
+        packBreakdown = `${cases} Cases`;
+      }
 
       productsData.push({
         id:
@@ -938,13 +1026,21 @@ if (order.slotId) {
             key,
           ),
 
-        quantity,
+        quantity: totalUnits,
+        cases,
+        extraQuantity: loose,
+        loose,
+        unitsPerCase,
 
-        price,
+        price: pricePerCase,
+        pricePerCase,
+        pricePerUnit,
+        loosePrice: product.loosePrice,
 
         subtotal:
-          quantity *
-          price,
+          itemSubtotal,
+
+        packBreakdown,
 
         unit:
           product.unit,

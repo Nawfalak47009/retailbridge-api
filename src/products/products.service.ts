@@ -60,6 +60,7 @@ export class ProductsService {
           quantityPerUnit:
             dto.quantityPerUnit,
           price: dto.price,
+          loosePrice: dto.loosePrice,
           stock: dto.stock,
           isActive:
             dto.isActive ?? "true",

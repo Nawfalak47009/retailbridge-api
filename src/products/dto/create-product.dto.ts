@@ -22,6 +22,10 @@ export class CreateProductDto {
   @IsString()
   price!: string;
 
+  @IsOptional()
+  @IsString()
+  loosePrice?: string;
+
   @IsString()
   stock!: string;
 

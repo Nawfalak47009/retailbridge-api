@@ -739,7 +739,7 @@ export class CartService {
       }
 
       // ========================================
-      // CALCULATE TOTAL
+      // CALCULATE TOTAL (Cases + Loose Units)
       // ========================================
 
       let totalAmount = 0;
@@ -761,13 +761,31 @@ export class CartService {
           );
         }
 
-        totalAmount +=
-          Number(
-            product.price,
-          ) *
-          Number(
-            item.quantity,
+        const unitsPerCase =
+          parseInt(product.quantityPerUnit, 10) || 1;
+        const totalUnits =
+          Number(item.quantity) || 0;
+        const casesCount =
+          Math.floor(totalUnits / unitsPerCase);
+        const looseCount =
+          totalUnits % unitsPerCase;
+
+        const pricePerCase =
+          Number(product.price) || 0;
+        const pricePerUnit =
+          product.loosePrice && Number(product.loosePrice) > 0
+            ? Number(product.loosePrice)
+            : unitsPerCase > 1
+            ? Number((pricePerCase / unitsPerCase).toFixed(2))
+            : pricePerCase;
+
+        const itemTotal =
+          Math.round(
+            (casesCount * pricePerCase) +
+            (looseCount * pricePerUnit),
           );
+
+        totalAmount += itemTotal;
       }
 
       // ========================================
@@ -820,12 +838,30 @@ export class CartService {
           .returning();
 
       // ========================================
-      // CREATE ORDER ITEMS
+      // CREATE ORDER ITEMS (Cases + Loose)
       // ========================================
 
       for (
         const item of items
       ) {
+        const product =
+          await db.query.products.findFirst({
+            where: eq(
+              products.id,
+              item.productId,
+            ),
+          });
+
+        const unitsPerCase = product
+          ? parseInt(product.quantityPerUnit, 10) || 1
+          : 1;
+        const totalUnits =
+          Number(item.quantity) || 0;
+        const casesCount =
+          Math.floor(totalUnits / unitsPerCase);
+        const looseCount =
+          totalUnits % unitsPerCase;
+
         await db
           .insert(orderItems)
           .values({
@@ -836,9 +872,10 @@ export class CartService {
               item.productId,
 
             cases:
-              String(
-                item.quantity,
-              ),
+              String(casesCount),
+
+            extraQuantity:
+              String(looseCount),
           });
       }
 
