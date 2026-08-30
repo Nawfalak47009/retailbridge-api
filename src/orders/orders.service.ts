@@ -1316,7 +1316,7 @@ if (order.slotId) {
         .returning();
 
     // ==========================================
-    // REWARD SHOP ONCE
+    // REWARD SHOP ONCE (5 Points per Delivered Order)
     // ==========================================
 
     if (
@@ -1341,7 +1341,7 @@ if (order.slotId) {
             "EARN",
 
           description:
-            "Order Delivered",
+            "Order Delivered (+5 Coins)",
         });
     }
 

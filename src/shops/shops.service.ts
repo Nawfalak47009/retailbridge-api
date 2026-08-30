@@ -99,10 +99,25 @@ export class ShopsService {
         ),
       });
 
+    const deliveredOrdersCount =
+      shopOrders.filter(
+        (order) =>
+          order.status ===
+          "DELIVERED",
+      ).length;
+
+    // 5 points / coins per successfully delivered order from DB
+    const realRewardPoints =
+      deliveredOrdersCount * 5;
+
     return {
       success: true,
 
-      shop,
+      shop: {
+        ...shop,
+        rewardPoints: realRewardPoints,
+        walletBalance: 0,
+      },
 
       stats: {
         connectedAgencies:
@@ -119,11 +134,12 @@ export class ShopsService {
           ).length,
 
         deliveredOrders:
-          shopOrders.filter(
-            (order) =>
-              order.status ===
-              "DELIVERED",
-          ).length,
+          deliveredOrdersCount,
+
+        rewardPoints:
+          realRewardPoints,
+
+        pointsPerOrder: 5,
       },
     };
   }
@@ -245,10 +261,24 @@ export class ShopsService {
         ],
       });
 
+    const deliveredOrdersCount =
+      shopOrders.filter(
+        (order) =>
+          order.status ===
+          "DELIVERED",
+      ).length;
+
+    // 5 points / coins per successfully delivered order from DB
+    const realRewardPoints =
+      deliveredOrdersCount * 5;
+
     return {
       success: true,
 
-      shop,
+      shop: {
+        ...shop,
+        rewardPoints: realRewardPoints,
+      },
 
       stats: {
         // =================================
@@ -280,11 +310,12 @@ export class ShopsService {
           ).length,
 
         deliveredOrders:
-          shopOrders.filter(
-            (order) =>
-              order.status ===
-              "DELIVERED",
-          ).length,
+          deliveredOrdersCount,
+
+        rewardPoints:
+          realRewardPoints,
+
+        pointsPerOrder: 5,
       },
 
       // =================================
