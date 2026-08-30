@@ -75,6 +75,42 @@ export class ProductsService {
     };
   }
 
+  private async resolveImageUrl(
+    image: string | null | undefined,
+  ): Promise<{ image: string; imageKey: string }> {
+    if (
+      !image ||
+      typeof image !== "string" ||
+      image.trim() === "" ||
+      image === "undefined" ||
+      image === "null"
+    ) {
+      return { image: "", imageKey: "" };
+    }
+
+    let key = image.trim();
+    if (key.startsWith("http://") || key.startsWith("https://")) {
+      try {
+        const urlObj = new URL(key);
+        const parts = urlObj.pathname.split("/").filter(Boolean);
+        key = parts[parts.length - 1] || "";
+      } catch {
+        key = key.split("?")[0].split("/").pop() || "";
+      }
+    }
+
+    if (!key) {
+      return { image: image, imageKey: "" };
+    }
+
+    try {
+      const signedUrl = await this.s3Service.getSignedImageUrl(key);
+      return { image: signedUrl, imageKey: key };
+    } catch {
+      return { image: image, imageKey: key };
+    }
+  }
+
   // ==========================================
   // MY PRODUCTS
   // ==========================================
@@ -110,20 +146,13 @@ export class ProductsService {
     return Promise.all(
       data.map(
         async (product) => {
-          let key =
-            product.image;
-
-          if (
-            key.startsWith("http")
-          ) {
-            key = key
-              .split("?")[0]
-              .split("/")
-              .pop()!;
-          }
+          const { image, imageKey } =
+            await this.resolveImageUrl(product.image);
 
           return {
             ...product,
+
+            imageKey,
 
             agencyName:
               agency.agencyName,
@@ -131,10 +160,7 @@ export class ProductsService {
             ownerName:
               agency.ownerName,
 
-            image:
-              await this.s3Service.getSignedImageUrl(
-                key,
-              ),
+            image,
           };
         },
       ),
@@ -206,17 +232,8 @@ export class ProductsService {
     return Promise.all(
       filteredProducts.map(
         async (product) => {
-          let key =
-            product.image;
-
-          if (
-            key.startsWith("http")
-          ) {
-            key = key
-              .split("?")[0]
-              .split("/")
-              .pop()!;
-          }
+          const { image, imageKey } =
+            await this.resolveImageUrl(product.image);
 
           const agency =
             await db.query.agencies.findFirst({
@@ -229,6 +246,8 @@ export class ProductsService {
           return {
             ...product,
 
+            imageKey,
+
             agencyName:
               agency?.agencyName ??
               "",
@@ -237,10 +256,7 @@ export class ProductsService {
               agency?.ownerName ??
               "",
 
-            image:
-              await this.s3Service.getSignedImageUrl(
-                key,
-              ),
+            image,
           };
         },
       ),
@@ -333,20 +349,13 @@ export class ProductsService {
     return Promise.all(
       data.map(
         async (product) => {
-          let key =
-            product.image;
-
-          if (
-            key.startsWith("http")
-          ) {
-            key = key
-              .split("?")[0]
-              .split("/")
-              .pop()!;
-          }
+          const { image, imageKey } =
+            await this.resolveImageUrl(product.image);
 
           return {
             ...product,
+
+            imageKey,
 
             agencyName:
               agency.agencyName,
@@ -354,10 +363,7 @@ export class ProductsService {
             ownerName:
               agency.ownerName,
 
-            image:
-              await this.s3Service.getSignedImageUrl(
-                key,
-              ),
+            image,
           };
         },
       ),
@@ -402,20 +408,13 @@ export class ProductsService {
         ),
       });
 
-    let key =
-      product.image;
-
-    if (
-      key.startsWith("http")
-    ) {
-      key = key
-        .split("?")[0]
-        .split("/")
-        .pop()!;
-    }
+    const { image, imageKey } =
+      await this.resolveImageUrl(product.image);
 
     return {
       ...product,
+
+      imageKey,
 
       agencyName:
         agency?.agencyName ?? "",
@@ -423,10 +422,7 @@ export class ProductsService {
       ownerName:
         agency?.ownerName ?? "",
 
-      image:
-        await this.s3Service.getSignedImageUrl(
-          key,
-        ),
+      image,
     };
   }
 
@@ -476,10 +472,39 @@ export class ProductsService {
       );
     }
 
+    const updateData: any = { ...dto };
+
+    // If no new image is provided, or image is empty string / invalid, preserve existing product image!
+    if (
+      !updateData.image ||
+      typeof updateData.image !== "string" ||
+      updateData.image.trim() === "" ||
+      updateData.image === "undefined" ||
+      updateData.image === "null"
+    ) {
+      delete updateData.image;
+    } else {
+      let imgKey = updateData.image.trim();
+      if (imgKey.startsWith("http://") || imgKey.startsWith("https://")) {
+        try {
+          const urlObj = new URL(imgKey);
+          const parts = urlObj.pathname.split("/").filter(Boolean);
+          imgKey = parts[parts.length - 1] || imgKey;
+        } catch {
+          imgKey = imgKey.split("?")[0].split("/").pop() || imgKey;
+        }
+      }
+      if (imgKey) {
+        updateData.image = imgKey;
+      } else {
+        delete updateData.image;
+      }
+    }
+
     const [updated] =
       await db
         .update(products)
-        .set(dto)
+        .set(updateData)
         .where(
           eq(
             products.id,
@@ -488,17 +513,8 @@ export class ProductsService {
         )
         .returning();
 
-    let key =
-      updated.image;
-
-    if (
-      key.startsWith("http")
-    ) {
-      key = key
-        .split("?")[0]
-        .split("/")
-        .pop()!;
-    }
+    const { image: resolvedImage, imageKey } =
+      await this.resolveImageUrl(updated.image);
 
     return {
       success: true,
@@ -509,10 +525,9 @@ export class ProductsService {
       product: {
         ...updated,
 
-        image:
-          await this.s3Service.getSignedImageUrl(
-            key,
-          ),
+        imageKey,
+
+        image: resolvedImage,
       },
     };
   }
