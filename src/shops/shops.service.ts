@@ -15,6 +15,8 @@ import {
   products,
   agencyShopConnections,
   deliverySlots,
+  documents,
+  users,
 } from "../db/schema";
 
 import { SubmitShopDocumentsDto } from "./dto/submit-shop-documents.dto";
@@ -34,7 +36,41 @@ export class ShopsService {
   async submit(
     dto: SubmitShopDocumentsDto,
   ) {
-    console.log(dto);
+    try {
+      // 1. Update users table with aadhaar URL
+      await db
+        .update(users)
+        .set({
+          aadhaar: dto.aadhaar,
+        })
+        .where(eq(users.id, dto.userId));
+
+      // 2. Clean previous document records for this user
+      await db
+        .delete(documents)
+        .where(
+          and(
+            eq(documents.userId, dto.userId),
+            inArray(documents.documentType, ["AADHAAR", "SHOP_PHOTO"]),
+          ),
+        );
+
+      // 3. Insert document rows in documents table
+      await db.insert(documents).values([
+        {
+          userId: dto.userId,
+          documentType: "AADHAAR",
+          documentUrl: dto.aadhaar,
+        },
+        {
+          userId: dto.userId,
+          documentType: "SHOP_PHOTO",
+          documentUrl: dto.shopPhoto,
+        },
+      ]);
+    } catch (err) {
+      console.log("Error saving shop documents:", err);
+    }
 
     return {
       success: true,
@@ -48,13 +84,24 @@ export class ShopsService {
   // =====================================
 
   async status(id: string) {
+    const userDocs = await db.query.documents.findMany({
+      where: eq(documents.userId, id),
+    });
+
+    const hasAadhaar = userDocs.some((d) => d.documentType === "AADHAAR");
+    const hasShopPhoto = userDocs.some((d) => d.documentType === "SHOP_PHOTO");
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, id),
+    });
+
     return {
       id,
-      status: "PENDING",
+      status: user?.status || "PENDING",
 
       documents: {
-        aadhaar: true,
-        shopPhoto: true,
+        aadhaar: hasAadhaar || Boolean(user?.aadhaar),
+        shopPhoto: hasShopPhoto,
       },
     };
   }
@@ -79,6 +126,24 @@ export class ShopsService {
         "Shop not found.",
       );
     }
+
+    // Documents & User verification info
+    const userDocs = await db.query.documents.findMany({
+      where: eq(documents.userId, userId),
+    });
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    const aadhaarDoc = userDocs.find((d) => d.documentType === "AADHAAR");
+    const shopPhotoDoc = userDocs.find((d) => d.documentType === "SHOP_PHOTO");
+
+    const documentsMap = {
+      aadhaar: aadhaarDoc?.documentUrl || user?.aadhaar || null,
+      shopPhoto: shopPhotoDoc?.documentUrl || null,
+      status: user?.status || "PENDING",
+    };
 
     // ===================================
     // CONNECTED AGENCIES
@@ -118,7 +183,11 @@ export class ShopsService {
         ...shop,
         rewardPoints: realRewardPoints,
         walletBalance: 0,
+        documents: documentsMap,
+        userStatus: user?.status || "PENDING",
       },
+
+      documents: documentsMap,
 
       stats: {
         connectedAgencies:
@@ -577,16 +646,22 @@ export class ShopsService {
           .pop()!;
       }
 
+      let imageUrl = product.image;
+      try {
+        if (key && !key.startsWith("http") && !key.startsWith("data:")) {
+          imageUrl = await this.s3Service.getSignedImageUrl(key);
+        }
+      } catch (err) {
+        imageUrl = product.image;
+      }
+
       result.push({
         id: product.id,
 
         name:
           product.name,
 
-        image:
-          await this.s3Service.getSignedImageUrl(
-            key,
-          ),
+        image: imageUrl,
 
         unit:
           product.unit,

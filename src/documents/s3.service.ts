@@ -25,19 +25,33 @@ export class S3Service {
   async getSignedImageUrl(
     key: string,
   ) {
-    const command =
-      new GetObjectCommand({
-        Bucket:
-          process.env.AWS_BUCKET_NAME!,
-        Key: key,
-      });
+    if (!key) return "";
+    if (key.startsWith("http://") || key.startsWith("https://") || key.startsWith("data:")) {
+      return key;
+    }
 
-    return getSignedUrl(
-      this.s3,
-      command,
-      {
-        expiresIn: 3600,
-      },
-    );
+    try {
+      const bucket = process.env.AWS_BUCKET_NAME;
+      if (!bucket || !process.env.AWS_ACCESS_KEY_ID) {
+        return key;
+      }
+
+      const command =
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        });
+
+      return await getSignedUrl(
+        this.s3,
+        command,
+        {
+          expiresIn: 3600,
+        },
+      );
+    } catch (err) {
+      console.log("Error generating signed S3 URL for key:", key, err);
+      return key;
+    }
   }
 }

@@ -519,4 +519,33 @@ export const rewardTransactions = pgTable(
   },
 );
 
+export const userSessions = pgTable(
+  "user_sessions",
+  {
+    id: uuid()
+      .defaultRandom()
+      .primaryKey(),
+
+    userId: varchar({
+      length: 255,
+    }).notNull(),
+
+    token: varchar({
+      length: 1000,
+    }).notNull(),
+
+    deviceInfo: varchar({
+      length: 255,
+    }),
+
+    createdAt: timestamp()
+      .defaultNow()
+      .notNull(),
+
+    lastActiveAt: timestamp()
+      .defaultNow()
+      .notNull(),
+  },
+);
+
 

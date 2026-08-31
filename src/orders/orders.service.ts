@@ -19,6 +19,7 @@ import {
   products,
   rewardTransactions,
   agencyShopConnections,
+  agencyShopRequests,
   deliverySlots,
 } from "../db/schema";
 
@@ -79,10 +80,35 @@ export class OrdersService {
     }
 
     // ==========================================
-    // CHECK SHOP ↔ AGENCY CONNECTION
+    // CHECK IF CONNECTION WAS REJECTED
     // ==========================================
 
-    const connection =
+    const rejectedRequest =
+      await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(
+            agencyShopRequests.agencyId,
+            agency.id,
+          ),
+          eq(
+            agencyShopRequests.shopId,
+            shop.id,
+          ),
+          eq(
+            agencyShopRequests.status,
+            "REJECTED",
+          ),
+        ),
+      });
+
+    if (rejectedRequest) {
+      throw new UnauthorizedException(
+        `Your connection request was declined by ${agency.agencyName}. You cannot place orders with this agency.`,
+      );
+    }
+
+    // Auto-link connection if new
+    const existingConnection =
       await db.query.agencyShopConnections.findFirst({
         where: and(
           eq(
@@ -96,10 +122,15 @@ export class OrdersService {
         ),
       });
 
-    if (!connection) {
-      throw new UnauthorizedException(
-        "Your shop is not connected to this agency.",
-      );
+    if (!existingConnection) {
+      try {
+        await db.insert(agencyShopConnections).values({
+          agencyId: agency.id,
+          shopId: shop.id,
+        });
+      } catch (linkErr) {
+        console.log("Auto-connect shop to agency note:", linkErr);
+      }
     }
 
     // ==========================================

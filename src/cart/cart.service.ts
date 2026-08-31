@@ -23,6 +23,7 @@ import {
   orders,
   orderItems,
   agencyShopConnections,
+  agencyShopRequests,
   deliverySlots,
 } from "../db/schema";
 
@@ -75,26 +76,30 @@ export class CartService {
     }
 
     // ==========================================
-    // CHECK SHOP ↔ AGENCY CONNECTION
+    // CHECK IF CONNECTION REQUEST WAS REJECTED
     // ==========================================
 
-    const connection =
-      await db.query.agencyShopConnections.findFirst({
+    const rejectedRequest =
+      await db.query.agencyShopRequests.findFirst({
         where: and(
           eq(
-            agencyShopConnections.agencyId,
+            agencyShopRequests.agencyId,
             product.agencyId,
           ),
           eq(
-            agencyShopConnections.shopId,
+            agencyShopRequests.shopId,
             shop.id,
+          ),
+          eq(
+            agencyShopRequests.status,
+            "REJECTED",
           ),
         ),
       });
 
-    if (!connection) {
+    if (rejectedRequest) {
       throw new UnauthorizedException(
-        "Your shop is not connected to this agency.",
+        "Your connection request was declined by this agency. You cannot order products from this agency.",
       );
     }
 
@@ -644,10 +649,35 @@ export class CartService {
       }
 
       // ========================================
-      // CHECK SHOP ↔ AGENCY CONNECTION
+      // CHECK IF CONNECTION WAS REJECTED
       // ========================================
 
-      const connection =
+      const rejectedRequest =
+        await db.query.agencyShopRequests.findFirst({
+          where: and(
+            eq(
+              agencyShopRequests.agencyId,
+              agency.id,
+            ),
+            eq(
+              agencyShopRequests.shopId,
+              shop.id,
+            ),
+            eq(
+              agencyShopRequests.status,
+              "REJECTED",
+            ),
+          ),
+        });
+
+      if (rejectedRequest) {
+        throw new UnauthorizedException(
+          `Your connection request was declined by ${agency.agencyName}. You cannot place orders with this agency.`,
+        );
+      }
+
+      // Ensure connection record exists for seamless future sync
+      const existingConnection =
         await db.query.agencyShopConnections.findFirst({
           where: and(
             eq(
@@ -661,10 +691,15 @@ export class CartService {
           ),
         });
 
-      if (!connection) {
-        throw new UnauthorizedException(
-          `Your shop is not connected to ${agency.agencyName}.`,
-        );
+      if (!existingConnection) {
+        try {
+          await db.insert(agencyShopConnections).values({
+            agencyId: agency.id,
+            shopId: shop.id,
+          });
+        } catch (linkErr) {
+          console.log("Auto-connect shop to agency note:", linkErr);
+        }
       }
 
       // ========================================

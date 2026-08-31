@@ -16,6 +16,7 @@ import {
   agencies,
   agencyProfiles,
   shops,
+  userSessions,
 } from "../db/schema";
 
 import { RegisterAgencyDto } from "./dto/register-agency.dto";
@@ -178,8 +179,9 @@ async login(dto: LoginDto) {
   }
 
   if (user.status !== "APPROVED") {
+    const roleLabel = user.role === "AGENCY" ? "agency" : "grocery";
     throw new UnauthorizedException(
-      "Your account is pending approval.",
+      `Your ${roleLabel} account is pending approval by admin. You will be able to log in once approved.`,
     );
   }
 
@@ -228,6 +230,35 @@ async login(dto: LoginDto) {
       email: user.email,
       role: user.role,
     });
+
+  // ==========================================================
+  // AGENCY MULTI-MEMBER CONCURRENT LOGIN LIMIT (MAX 5 MEMBERS)
+  // ==========================================================
+  if (user.role === "AGENCY") {
+    try {
+      const activeSessions = await db.query.userSessions.findMany({
+        where: eq(userSessions.userId, user.id),
+        orderBy: (s, { asc }) => [asc(s.createdAt)],
+      });
+
+      // Keep strictly maximum 5 active members logged in at any time
+      if (activeSessions.length >= 5) {
+        const sessionsToRemove = activeSessions.slice(0, activeSessions.length - 4);
+        for (const oldSession of sessionsToRemove) {
+          await db.delete(userSessions).where(eq(userSessions.id, oldSession.id));
+        }
+      }
+
+      // Record this login session
+      await db.insert(userSessions).values({
+        userId: user.id,
+        token: token.slice(-50),
+        deviceInfo: "Agency Mobile/Web Session",
+      });
+    } catch (sessionErr) {
+      console.log("Agency session limit tracking error:", sessionErr);
+    }
+  }
 
   return {
     success: true,
