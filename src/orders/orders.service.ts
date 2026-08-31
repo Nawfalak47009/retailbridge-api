@@ -468,12 +468,10 @@ export class OrdersService {
       // ========================================
 
       let deliveryDay:
-  typeof deliverySlots.$inferSelect |
-  undefined = undefined;
+        typeof deliverySlots.$inferSelect |
+        undefined = undefined;
 
-      if (
-        order.slotId
-      ) {
+      if (order.slotId) {
         deliveryDay =
           await db.query.deliverySlots.findFirst({
             where: and(
@@ -493,8 +491,24 @@ export class OrdersService {
           });
       }
 
+      if (!deliveryDay) {
+        deliveryDay = await db.query.deliverySlots.findFirst({
+          where: and(
+            eq(deliverySlots.agencyId, order.agencyId),
+            eq(deliverySlots.shopId, order.shopId),
+            eq(deliverySlots.isActive, "true"),
+          ),
+          orderBy: (s, { desc }) => [desc(s.createdAt)],
+        });
+      }
+
       let effectiveScheduledDate = order.scheduledDate;
-      if (
+      if (!effectiveScheduledDate && deliveryDay) {
+        effectiveScheduledDate = calculateNextDeliveryDate(
+          deliveryDay,
+          order.createdAt ? new Date(order.createdAt) : new Date(),
+        );
+      } else if (
         effectiveScheduledDate &&
         order.createdAt &&
         order.status !== "DELIVERED" &&
@@ -799,22 +813,38 @@ if (order.slotId) {
     });
 }
 
-      let effectiveScheduledDate = order.scheduledDate;
-      if (
-        effectiveScheduledDate &&
-        order.createdAt &&
-        order.status !== "DELIVERED" &&
-        order.status !== "CANCELLED"
-      ) {
-        const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
-        const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-        if (schedTime < createdTime && deliveryDay) {
-          effectiveScheduledDate = calculateNextDeliveryDate(
-            deliveryDay,
-            new Date(order.createdAt),
-          );
-        }
-      }
+if (!deliveryDay) {
+  deliveryDay = await db.query.deliverySlots.findFirst({
+    where: and(
+      eq(deliverySlots.agencyId, order.agencyId),
+      eq(deliverySlots.shopId, order.shopId),
+      eq(deliverySlots.isActive, "true"),
+    ),
+    orderBy: (s, { desc }) => [desc(s.createdAt)],
+  });
+}
+
+let effectiveScheduledDate = order.scheduledDate;
+if (!effectiveScheduledDate && deliveryDay) {
+  effectiveScheduledDate = calculateNextDeliveryDate(
+    deliveryDay,
+    order.createdAt ? new Date(order.createdAt) : new Date(),
+  );
+} else if (
+  effectiveScheduledDate &&
+  order.createdAt &&
+  order.status !== "DELIVERED" &&
+  order.status !== "CANCELLED"
+) {
+  const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+  const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+  if (schedTime < createdTime && deliveryDay) {
+    effectiveScheduledDate = calculateNextDeliveryDate(
+      deliveryDay,
+      new Date(order.createdAt),
+    );
+  }
+}
 
       response.push({
         id:
@@ -1135,22 +1165,38 @@ if (order.slotId) {
     });
 }
 
-    let effectiveScheduledDate = order.scheduledDate;
-    if (
-      effectiveScheduledDate &&
-      order.createdAt &&
-      order.status !== "DELIVERED" &&
-      order.status !== "CANCELLED"
-    ) {
-      const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
-      const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-      if (schedTime < createdTime && deliveryDay) {
-        effectiveScheduledDate = calculateNextDeliveryDate(
-          deliveryDay,
-          new Date(order.createdAt),
-        );
-      }
-    }
+if (!deliveryDay) {
+  deliveryDay = await db.query.deliverySlots.findFirst({
+    where: and(
+      eq(deliverySlots.agencyId, order.agencyId),
+      eq(deliverySlots.shopId, order.shopId),
+      eq(deliverySlots.isActive, "true"),
+    ),
+    orderBy: (s, { desc }) => [desc(s.createdAt)],
+  });
+}
+
+let effectiveScheduledDate = order.scheduledDate;
+if (!effectiveScheduledDate && deliveryDay) {
+  effectiveScheduledDate = calculateNextDeliveryDate(
+    deliveryDay,
+    order.createdAt ? new Date(order.createdAt) : new Date(),
+  );
+} else if (
+  effectiveScheduledDate &&
+  order.createdAt &&
+  order.status !== "DELIVERED" &&
+  order.status !== "CANCELLED"
+) {
+  const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+  const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+  if (schedTime < createdTime && deliveryDay) {
+    effectiveScheduledDate = calculateNextDeliveryDate(
+      deliveryDay,
+      new Date(order.createdAt),
+    );
+  }
+}
 
     return {
       id:

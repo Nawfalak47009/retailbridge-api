@@ -181,6 +181,25 @@ export class DeliverySlotsService {
         })
         .returning();
 
+    // Immediately sync all pending/active orders for this shop to this delivery date
+    try {
+      await db
+        .update(orders)
+        .set({
+          scheduledDate: deliveryDate,
+          slotId: deliveryDay.id,
+        })
+        .where(
+          and(
+            eq(orders.agencyId, dto.agencyId),
+            eq(orders.shopId, dto.shopId),
+            inArray(orders.status, ["PLACED", "ACCEPTED", "PROCESSING", "PENDING", "SCHEDULED"]),
+          ),
+        );
+    } catch (orderSyncErr) {
+      console.log("Order delivery slot sync note:", orderSyncErr);
+    }
+
     return {
       success: true,
 
