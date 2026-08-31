@@ -107,6 +107,39 @@ export class OrdersService {
       );
     }
 
+    // Automatically send a Connection Request if not already connected and no pending request exists
+    const existingConnection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(agencyShopConnections.agencyId, agency.id),
+          eq(agencyShopConnections.shopId, shop.id),
+        ),
+      });
+
+    if (!existingConnection) {
+      const existingReq =
+        await db.query.agencyShopRequests.findFirst({
+          where: and(
+            eq(agencyShopRequests.agencyId, agency.id),
+            eq(agencyShopRequests.shopId, shop.id),
+            eq(agencyShopRequests.status, "PENDING"),
+          ),
+        });
+
+      if (!existingReq) {
+        try {
+          await db.insert(agencyShopRequests).values({
+            agencyId: agency.id,
+            shopId: shop.id,
+            requestedBy: "SHOP",
+            status: "PENDING",
+          });
+        } catch (reqErr) {
+          console.log("Auto connection request on order create note:", reqErr);
+        }
+      }
+    }
+
     // ==========================================
     // FIND ACTIVE DELIVERY DAYS
     // ==========================================
