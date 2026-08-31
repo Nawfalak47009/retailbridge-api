@@ -189,48 +189,16 @@ export class ProductsService {
     }
 
     // ========================================
-    // ONLY CONNECTED AGENCIES
-    // ========================================
-
-    const connections =
-      await db.query.agencyShopConnections.findMany({
-        where: eq(
-          agencyShopConnections.shopId,
-          shop.id,
-        ),
-      });
-
-    const connectedAgencyIds =
-      connections.map(
-        (connection) =>
-          connection.agencyId,
-      );
-
-    // No connected agencies
-    if (
-      connectedAgencyIds.length === 0
-    ) {
-      return [];
-    }
-
-    // ========================================
     // GET ALL PRODUCTS
     // ========================================
 
     const allProducts =
-      await db.query.products.findMany();
-
-    // Only products from connected agencies
-    const filteredProducts =
-      allProducts.filter(
-        (product) =>
-          connectedAgencyIds.includes(
-            product.agencyId,
-          ),
-      );
+      await db.query.products.findMany({
+        where: eq(products.isActive, "true"),
+      });
 
     return Promise.all(
-      filteredProducts.map(
+      allProducts.map(
         async (product) => {
           const { image, imageKey } =
             await this.resolveImageUrl(product.image);
@@ -272,24 +240,6 @@ export class ProductsService {
     agencyId: string,
   ) {
     // ========================================
-    // FIND SHOP
-    // ========================================
-
-    const shop =
-      await db.query.shops.findFirst({
-        where: eq(
-          shops.userId,
-          userId,
-        ),
-      });
-
-    if (!shop) {
-      throw new NotFoundException(
-        "Shop not found.",
-      );
-    }
-
-    // ========================================
     // VERIFY AGENCY
     // ========================================
 
@@ -304,30 +254,6 @@ export class ProductsService {
     if (!agency) {
       throw new NotFoundException(
         "Agency not found.",
-      );
-    }
-
-    // ========================================
-    // VERIFY SHOP ↔ AGENCY CONNECTION
-    // ========================================
-
-    const connection =
-      await db.query.agencyShopConnections.findFirst({
-        where: and(
-          eq(
-            agencyShopConnections.shopId,
-            shop.id,
-          ),
-          eq(
-            agencyShopConnections.agencyId,
-            agencyId,
-          ),
-        ),
-      });
-
-    if (!connection) {
-      throw new UnauthorizedException(
-        "You are not connected to this agency.",
       );
     }
 
