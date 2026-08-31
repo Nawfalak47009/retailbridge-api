@@ -206,13 +206,24 @@ export class AgencyConnectionsService {
       );
     }
 
-    const agency =
-      await db.query.agencies.findFirst({
-        where: eq(
-          agencies.id,
-          agencyId,
-        ),
+    let agency: any = null;
+    if (agencyId) {
+      agency = await db.query.agencies.findFirst({
+        where: eq(agencies.id, agencyId),
       });
+    }
+
+    if (!agency) {
+      agency = await db.query.agencies.findFirst({
+        where: eq(agencies.userId, user.id),
+      });
+    }
+
+    if (!agency && agencyId) {
+      agency = await db.query.agencies.findFirst({
+        where: eq(agencies.userId, agencyId),
+      });
+    }
 
     if (!agency) {
       throw new BadRequestException(
@@ -220,20 +231,14 @@ export class AgencyConnectionsService {
       );
     }
 
-    if (agency.userId !== user.id) {
-      throw new ForbiddenException(
-        "You can only access your own agency requests.",
-      );
-    }
-
-    return db
+    const requests = await db
       .select()
       .from(agencyShopRequests)
       .where(
         and(
           eq(
             agencyShopRequests.agencyId,
-            agencyId,
+            agency.id,
           ),
           eq(
             agencyShopRequests.requestedBy,
@@ -245,6 +250,34 @@ export class AgencyConnectionsService {
           ),
         ),
       );
+
+    return Promise.all(
+      requests.map(async (req) => {
+        let shop = await db.query.shops.findFirst({
+          where: eq(shops.id, req.shopId),
+        });
+
+        if (!shop) {
+          shop = await db.query.shops.findFirst({
+            where: eq(shops.userId, req.shopId),
+          });
+        }
+
+        return {
+          ...req,
+          shop: shop
+            ? {
+                id: shop.id,
+                shopName: shop.shopName,
+                ownerName: shop.ownerName,
+                phone: shop.phone,
+                address: shop.address,
+                pincode: shop.pincode,
+              }
+            : null,
+        };
+      }),
+    );
   }
 
   // ==========================================
@@ -538,6 +571,16 @@ export class AgencyConnectionsService {
         ),
       );
 
+    // Remove connection if exists
+    await db
+      .delete(agencyShopConnections)
+      .where(
+        and(
+          eq(agencyShopConnections.agencyId, request.agencyId),
+          eq(agencyShopConnections.shopId, request.shopId),
+        ),
+      );
+
     return {
       success: true,
 
@@ -651,6 +694,17 @@ export class AgencyConnectionsService {
         continue;
       }
 
+      const req = await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(agencyShopRequests.agencyId, connection.agencyId),
+          eq(agencyShopRequests.shopId, shopId),
+        ),
+      });
+
+      if (req && req.status !== "ACCEPTED") {
+        continue;
+      }
+
       result.push({
         connectionId:
           connection.connectionId,
@@ -684,7 +738,7 @@ export class AgencyConnectionsService {
     user: any,
   ) {
     // ------------------------------------------
-    // Verify role
+    // Authorization
     // ------------------------------------------
 
     if (user.role !== "AGENCY") {
@@ -765,6 +819,17 @@ export class AgencyConnectionsService {
 
       // Ignore stale connection records
       if (!shop) {
+        continue;
+      }
+
+      const req = await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(agencyShopRequests.agencyId, agencyId),
+          eq(agencyShopRequests.shopId, connection.shopId),
+        ),
+      });
+
+      if (req && req.status !== "ACCEPTED") {
         continue;
       }
 

@@ -107,32 +107,6 @@ export class OrdersService {
       );
     }
 
-    // Auto-link connection if new
-    const existingConnection =
-      await db.query.agencyShopConnections.findFirst({
-        where: and(
-          eq(
-            agencyShopConnections.agencyId,
-            agency.id,
-          ),
-          eq(
-            agencyShopConnections.shopId,
-            shop.id,
-          ),
-        ),
-      });
-
-    if (!existingConnection) {
-      try {
-        await db.insert(agencyShopConnections).values({
-          agencyId: agency.id,
-          shopId: shop.id,
-        });
-      } catch (linkErr) {
-        console.log("Auto-connect shop to agency note:", linkErr);
-      }
-    }
-
     // ==========================================
     // FIND ACTIVE DELIVERY DAYS
     // ==========================================

@@ -115,18 +115,29 @@ export class ShopsController {
 // Frequently Bought Products
 // =====================================
 
-@Get("frequently-bought")
-@UseGuards(
-  JwtAuthGuard,
-  RolesGuard,
-)
-@Roles("SHOP")
-frequentlyBought(
-  @CurrentUser() user: JwtUser,
-) {
-  return this.shopsService.frequentlyBought(
-    user.id,
-  );
-}
+  @Get("frequently-bought")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  frequentlyBought(
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.shopsService.frequentlyBought(
+      user.id,
+    );
+  }
+
+  // =====================================
+  // Single Shop by ID
+  // =====================================
+
+  @Get(":id")
+  findOne(
+    @Param("id") id: string,
+  ) {
+    return this.shopsService.findOne(id);
+  }
 }
 

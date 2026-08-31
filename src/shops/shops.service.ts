@@ -693,4 +693,41 @@ export class ShopsService {
       10,
     );
   }
+
+  // =====================================
+  // Find One Shop by ID
+  // =====================================
+
+  async findOne(id: string) {
+    let shop = await db.query.shops.findFirst({
+      where: eq(shops.id, id),
+    });
+
+    if (!shop) {
+      shop = await db.query.shops.findFirst({
+        where: eq(shops.userId, id),
+      });
+    }
+
+    if (!shop) {
+      throw new NotFoundException("Shop not found");
+    }
+
+    let phone = shop.phone || "";
+    let email = "";
+    if (shop.userId) {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, shop.userId),
+      });
+      if (user) {
+        email = user.email || "";
+      }
+    }
+
+    return {
+      ...shop,
+      phone,
+      email,
+    };
+  }
 }
