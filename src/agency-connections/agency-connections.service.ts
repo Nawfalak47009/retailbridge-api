@@ -35,6 +35,9 @@ export class AgencyConnectionsService {
     // SHOP IS REQUESTING
     // ==========================================
 
+    let actualShopId = dto.shopId;
+    let actualAgencyId = dto.agencyId;
+
     if (dto.requestedBy === "SHOP") {
       if (user.role !== "SHOP") {
         throw new ForbiddenException(
@@ -42,13 +45,24 @@ export class AgencyConnectionsService {
         );
       }
 
-      const shop =
-        await db.query.shops.findFirst({
-          where: eq(
-            shops.id,
-            dto.shopId,
-          ),
+      let shop: any = null;
+      if (dto.shopId) {
+        shop = await db.query.shops.findFirst({
+          where: eq(shops.id, dto.shopId),
         });
+      }
+
+      if (!shop) {
+        shop = await db.query.shops.findFirst({
+          where: eq(shops.userId, user.id),
+        });
+      }
+
+      if (!shop && dto.shopId) {
+        shop = await db.query.shops.findFirst({
+          where: eq(shops.userId, dto.shopId),
+        });
+      }
 
       if (!shop) {
         throw new BadRequestException(
@@ -56,11 +70,7 @@ export class AgencyConnectionsService {
         );
       }
 
-      if (shop.userId !== user.id) {
-        throw new ForbiddenException(
-          "You can only send requests for your own shop.",
-        );
-      }
+      actualShopId = shop.id;
     }
 
     // ==========================================
@@ -74,13 +84,18 @@ export class AgencyConnectionsService {
         );
       }
 
-      const agency =
-        await db.query.agencies.findFirst({
-          where: eq(
-            agencies.id,
-            dto.agencyId,
-          ),
+      let agency: any = null;
+      if (dto.agencyId) {
+        agency = await db.query.agencies.findFirst({
+          where: eq(agencies.id, dto.agencyId),
         });
+      }
+
+      if (!agency) {
+        agency = await db.query.agencies.findFirst({
+          where: eq(agencies.userId, user.id),
+        });
+      }
 
       if (!agency) {
         throw new BadRequestException(
@@ -88,11 +103,7 @@ export class AgencyConnectionsService {
         );
       }
 
-      if (agency.userId !== user.id) {
-        throw new ForbiddenException(
-          "You can only send requests for your own agency.",
-        );
-      }
+      actualAgencyId = agency.id;
     }
 
     // ==========================================
@@ -104,11 +115,11 @@ export class AgencyConnectionsService {
         where: and(
           eq(
             agencyShopRequests.agencyId,
-            dto.agencyId,
+            actualAgencyId,
           ),
           eq(
             agencyShopRequests.shopId,
-            dto.shopId,
+            actualShopId,
           ),
           eq(
             agencyShopRequests.status,
@@ -132,11 +143,11 @@ export class AgencyConnectionsService {
         where: and(
           eq(
             agencyShopConnections.agencyId,
-            dto.agencyId,
+            actualAgencyId,
           ),
           eq(
             agencyShopConnections.shopId,
-            dto.shopId,
+            actualShopId,
           ),
         ),
       });
@@ -153,13 +164,15 @@ export class AgencyConnectionsService {
 
     const [request] =
       await db
-        .insert(agencyShopRequests)
+        .insert(
+          agencyShopRequests,
+        )
         .values({
           agencyId:
-            dto.agencyId,
+            actualAgencyId,
 
           shopId:
-            dto.shopId,
+            actualShopId,
 
           requestedBy:
             dto.requestedBy,
