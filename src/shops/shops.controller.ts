@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 
@@ -126,6 +127,26 @@ export class ShopsController {
   ) {
     return this.shopsService.frequentlyBought(
       user.id,
+    );
+  }
+
+  // =====================================
+  // Grocery Stores Leaderboard
+  // =====================================
+
+  @Get("leaderboard")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  leaderboard(
+    @CurrentUser() user: JwtUser,
+    @Query("period") period?: string,
+  ) {
+    return this.shopsService.getLeaderboard(
+      user.id,
+      period,
     );
   }
 

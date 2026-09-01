@@ -3,7 +3,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 
 import { db } from "../db";
 
@@ -728,6 +728,158 @@ export class ShopsService {
       ...shop,
       phone,
       email,
+    };
+  }
+
+  // =====================================
+  // Leaderboard of Grocery Stores
+  // =====================================
+
+  async getLeaderboard(userId?: string, period: string = "ALL") {
+    // 1. Fetch all registered shops
+    const allShops = await db.query.shops.findMany();
+
+    // 2. Date filter if period is MONTH or WEEK
+    const now = new Date();
+    let startDate: Date | null = null;
+    if (period === "MONTH") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === "WEEK") {
+      const dayOfWeek = now.getDay();
+      startDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1),
+      );
+    }
+
+    // 3. Fetch all active orders (excluding CANCELLED)
+    const allOrders = await db.query.orders.findMany({
+      where: ne(orders.status, "CANCELLED"),
+    });
+
+    const allOrderItems = await db.query.orderItems.findMany();
+
+    // Map orderId -> total quantity/items
+    const orderItemCountMap: Record<
+      string,
+      { units: number; items: number }
+    > = {};
+
+    for (const item of allOrderItems) {
+      const cases = Number(item.cases) || 0;
+      const loose = Number(item.extraQuantity) || 0;
+      const totalUnits = cases + loose;
+
+      if (!orderItemCountMap[item.orderId]) {
+        orderItemCountMap[item.orderId] = { units: 0, items: 0 };
+      }
+      orderItemCountMap[item.orderId].units += totalUnits || 1;
+      orderItemCountMap[item.orderId].items += 1;
+    }
+
+    // Find current user's shop ID
+    let currentShopId: string | null = null;
+    if (userId) {
+      const currentShop = await db.query.shops.findFirst({
+        where: eq(shops.userId, userId),
+      });
+      if (currentShop) {
+        currentShopId = currentShop.id;
+      }
+    }
+
+    // Compute metrics for every shop
+    const shopRankList = allShops.map((s) => {
+      let shopOrders = allOrders.filter(
+        (o) => o.shopId === s.id || o.shopId === s.userId,
+      );
+
+      if (startDate) {
+        shopOrders = shopOrders.filter(
+          (o) => o.createdAt && new Date(o.createdAt) >= startDate,
+        );
+      }
+
+      let totalOrders = shopOrders.length;
+      let totalProductsOrdered = 0;
+      let totalSpent = 0;
+      let rewardPoints = 0;
+
+      for (const ord of shopOrders) {
+        totalSpent += Number(ord.totalAmount) || 0;
+        rewardPoints += Number(ord.rewardPoints) || 0;
+
+        const counts = orderItemCountMap[ord.id];
+        if (counts) {
+          totalProductsOrdered += counts.units || counts.items || 1;
+        } else {
+          totalProductsOrdered += 1;
+        }
+      }
+
+      return {
+        shopId: s.id,
+        userId: s.userId,
+        shopName: s.shopName || "Grocery Store",
+        ownerName: s.ownerName || "Retail Partner",
+        phone: s.phone || "",
+        address: s.address || "",
+        pincode: s.pincode || "",
+        totalOrders,
+        totalProductsOrdered,
+        totalSpent: Math.round(totalSpent),
+        rewardPoints,
+        isCurrentUser: s.id === currentShopId || s.userId === userId,
+      };
+    });
+
+    // Sort descending by totalProductsOrdered, then totalSpent, then totalOrders
+    shopRankList.sort((a, b) => {
+      if (b.totalProductsOrdered !== a.totalProductsOrdered) {
+        return b.totalProductsOrdered - a.totalProductsOrdered;
+      }
+      if (b.totalSpent !== a.totalSpent) {
+        return b.totalSpent - a.totalSpent;
+      }
+      return b.totalOrders - a.totalOrders;
+    });
+
+    // Assign rank, medals, and badges
+    const rankedShops = shopRankList.map((s, index) => {
+      const rank = index + 1;
+      let medal: "GOLD" | "SILVER" | "BRONZE" | null = null;
+      let tierBadge = "Retail Partner";
+
+      if (rank === 1) {
+        medal = "GOLD";
+        tierBadge = "🥇 Grand Champion";
+      } else if (rank === 2) {
+        medal = "SILVER";
+        tierBadge = "🥈 Elite Retailer";
+      } else if (rank === 3) {
+        medal = "BRONZE";
+        tierBadge = "🥉 Star Retailer";
+      } else if (rank <= 10) {
+        tierBadge = `⭐ Top ${rank} Retailer`;
+      }
+
+      return {
+        ...s,
+        rank,
+        medal,
+        tierBadge,
+      };
+    });
+
+    const currentUserEntry =
+      rankedShops.find((s) => s.isCurrentUser) || null;
+
+    return {
+      period,
+      totalRetailers: rankedShops.length,
+      leaderboard: rankedShops,
+      currentUserRank: currentUserEntry,
     };
   }
 }
