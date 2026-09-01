@@ -32,8 +32,11 @@ export class AgenciesController {
   RolesGuard,
 )
 @Roles("SHOP")
-findAll() {
-  return this.agenciesService.findAll();
+findAll(
+  @CurrentUser()
+  user: any,
+) {
+  return this.agenciesService.findAll(user?.id);
 }
 
   // ==========================================

@@ -24,7 +24,17 @@ export class AgenciesService {
   // ALL APPROVED AGENCIES
   // ==========================================
 
-  async findAll()  {
+  async findAll(userId?: string) {
+    let currentShopId: string | null = null;
+    if (userId) {
+      const currentShop = await db.query.shops.findFirst({
+        where: eq(shops.userId, userId),
+      });
+      if (currentShop) {
+        currentShopId = currentShop.id;
+      }
+    }
+
     const agencyList =
       await db.query.agencies.findMany();
 
@@ -39,6 +49,7 @@ export class AgenciesService {
       productCount: number;
       shopCount: number;
       categories: string[];
+      connected: boolean;
     }[] = [];
 
     for (
@@ -100,6 +111,10 @@ export class AgenciesService {
           ),
         });
 
+      const isConnected = currentShopId
+        ? connections.some((c) => c.shopId === currentShopId)
+        : false;
+
       const categories = [
         ...new Set(
           productList.map(
@@ -137,6 +152,8 @@ export class AgenciesService {
           connections.length,
 
         categories,
+
+        connected: isConnected,
       });
     }
 
