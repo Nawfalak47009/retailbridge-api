@@ -181,6 +181,7 @@ export class ShopsService {
 
       shop: {
         ...shop,
+        image: (shop as any)?.image || shopPhotoDoc?.documentUrl || null,
         rewardPoints: realRewardPoints,
         walletBalance: 0,
         documents: documentsMap,
@@ -227,6 +228,7 @@ export class ShopsService {
       ownerName?: string;
       phone?: string;
       landmark?: string;
+      image?: string;
     },
   ) {
     const shop =
@@ -249,6 +251,7 @@ export class ShopsService {
     if (body.shopName !== undefined && body.shopName.trim()) updateFields.shopName = body.shopName.trim();
     if (body.ownerName !== undefined && body.ownerName.trim()) updateFields.ownerName = body.ownerName.trim();
     if (body.phone !== undefined && body.phone.trim()) updateFields.phone = body.phone.trim();
+    if (body.image !== undefined) updateFields.image = body.image.trim();
 
     const [updated] =
       await db

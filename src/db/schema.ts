@@ -73,6 +73,10 @@ export const agencies = pgTable(
     phone: varchar({
       length: 20,
     }).notNull(),
+
+    logo: varchar({
+      length: 500,
+    }),
   }
 );
 
@@ -90,6 +94,8 @@ export const shops = pgTable("shops", {
   address: varchar({ length: 500 }).notNull(),
 
   pincode: varchar({ length: 10 }).notNull(),
+
+  image: varchar({ length: 500 }),
 
   createdAt: timestamp().defaultNow().notNull(),
 });
@@ -338,6 +344,11 @@ export const shopProfiles = pgTable(
     }),
 
     deliveryNotes:
+      varchar({
+        length: 500,
+      }),
+
+    image:
       varchar({
         length: 500,
       }),

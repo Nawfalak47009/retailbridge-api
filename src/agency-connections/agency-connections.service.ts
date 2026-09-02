@@ -273,6 +273,7 @@ export class AgencyConnectionsService {
                 phone: shop.phone,
                 address: shop.address,
                 pincode: shop.pincode,
+                image: (shop as any)?.image || null,
               }
             : null,
         };
@@ -803,6 +804,7 @@ export class AgencyConnectionsService {
       phone: string;
       address: string | null;
       pincode: string | null;
+      image?: string | null;
       connectedAt: Date | null;
     }> = [];
 
@@ -854,6 +856,9 @@ export class AgencyConnectionsService {
 
         pincode:
           shop.pincode,
+
+        image:
+          (shop as any)?.image || null,
 
         connectedAt:
           connection.connectedAt,

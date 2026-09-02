@@ -140,7 +140,7 @@ export class AgenciesService {
           profile?.address ?? "",
 
         logo:
-          profile?.logo ?? "",
+          profile?.logo || (agency as any)?.logo || "",
 
         description:
           profile?.description ?? "",
@@ -482,7 +482,8 @@ export class AgenciesService {
           "",
 
         logo:
-          profile?.logo ??
+          profile?.logo ||
+          (agency as any)?.logo ||
           "",
       },
 
@@ -543,10 +544,11 @@ export class AgenciesService {
   async updateProfile(
     userId: string,
     body: {
-      agencyName: string;
-      ownerName: string;
-      phone: string;
-      address: string;
+      agencyName?: string;
+      ownerName?: string;
+      phone?: string;
+      address?: string;
+      logo?: string;
     },
   ) {
     const agency =
@@ -566,38 +568,52 @@ export class AgenciesService {
     }
 
     // Update agency
-    await db
-      .update(agencies)
-      .set({
-        agencyName:
-          body.agencyName,
+    const agencyUpdate: any = {};
+    if (body.agencyName !== undefined && body.agencyName.trim()) agencyUpdate.agencyName = body.agencyName.trim();
+    if (body.ownerName !== undefined && body.ownerName.trim()) agencyUpdate.ownerName = body.ownerName.trim();
+    if (body.phone !== undefined && body.phone.trim()) agencyUpdate.phone = body.phone.trim();
+    if (body.logo !== undefined) agencyUpdate.logo = body.logo.trim();
 
-        ownerName:
-          body.ownerName,
+    if (Object.keys(agencyUpdate).length > 0) {
+      await db
+        .update(agencies)
+        .set(agencyUpdate)
+        .where(
+          eq(
+            agencies.id,
+            agency.id,
+          ),
+        );
+    }
 
-        phone:
-          body.phone,
-      })
-      .where(
-        eq(
-          agencies.id,
-          agency.id,
-        ),
-      );
+    // Update or create agency profile
+    const existingProfile = await db.query.agencyProfiles.findFirst({
+      where: eq(agencyProfiles.agencyId, agency.id),
+    });
 
-    // Update agency profile
-    await db
-      .update(agencyProfiles)
-      .set({
-        address:
-          body.address,
-      })
-      .where(
-        eq(
-          agencyProfiles.agencyId,
-          agency.id,
-        ),
-      );
+    const profileUpdate: any = {};
+    if (body.address !== undefined) profileUpdate.address = body.address.trim();
+    if (body.logo !== undefined) profileUpdate.logo = body.logo.trim();
+
+    if (existingProfile) {
+      if (Object.keys(profileUpdate).length > 0) {
+        await db
+          .update(agencyProfiles)
+          .set(profileUpdate)
+          .where(
+            eq(
+              agencyProfiles.agencyId,
+              agency.id,
+            ),
+          );
+      }
+    } else {
+      await db.insert(agencyProfiles).values({
+        agencyId: agency.id,
+        address: body.address || "",
+        logo: body.logo || "",
+      });
+    }
 
     return {
       success: true,

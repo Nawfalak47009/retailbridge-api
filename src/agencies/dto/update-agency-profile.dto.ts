@@ -1,22 +1,27 @@
 import {
   IsNotEmpty,
+  IsOptional,
   IsString,
 } from "class-validator";
 
 export class UpdateAgencyProfileDto {
   @IsString()
-  @IsNotEmpty()
-  agencyName!: string;
+  @IsOptional()
+  agencyName?: string;
 
   @IsString()
-  @IsNotEmpty()
-  ownerName!: string;
+  @IsOptional()
+  ownerName?: string;
 
   @IsString()
-  @IsNotEmpty()
-  phone!: string;
+  @IsOptional()
+  phone?: string;
 
   @IsString()
-  @IsNotEmpty()
-  address!: string;
+  @IsOptional()
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  logo?: string;
 }
