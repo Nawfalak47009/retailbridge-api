@@ -535,6 +535,10 @@ export class DeliverySlotsService {
       );
     }
 
+    const shop = await db.query.shops.findFirst({
+      where: eq(shops.id, shopId),
+    });
+
     // ------------------------------------------
     // Get connected agencies
     // ------------------------------------------
@@ -655,21 +659,70 @@ export class DeliverySlotsService {
         day: "numeric",
       });
 
+      const tamilMessage = `🔔 *RetailBridge டெலிவரி நினைவூட்டல்* 🔔\n\nவணக்கம் *${shop?.shopName || "கடை உரிமையாளர்"}*,\n\n🏢 உங்கள் இணைக்கப்பட்ட ஏஜென்சி: *${agency?.agencyName || "ஏஜென்சி"}*\n🚚 டெலிவரி நாள்: *${slot.day}* (${formattedDate})\n\n⚠️ *தயவுசெய்து உங்கள் ஸ்லாட் முடிவடைவதற்குள் தேவையான பொருட்களை உடனே ஆர்டர் செய்யவும்!*\n(Please order your products before your slot closes)\n\nஸ்லாட் நேரம் முடிந்தவுடன் இந்த வாரத்திற்கான ஆர்டர்கள் ஏற்றுக்கொள்ளப்படாது. உடனடியாக ஆர்டர் செய்ய RetailBridge செயலியைப் பயன்படுத்தவும்.\n\nநன்றி! 🙏\nRetailBridge Support`;
+
       reminders.push({
         slotId: slot.id,
         agencyId: slot.agencyId,
         agencyName: agency?.agencyName || "Connected Agency",
         agencyPhone: agency?.phone || "",
         ownerName: agency?.ownerName || "",
+        shopId,
+        shopName: shop?.shopName || "Grocery Store",
+        shopPhone: shop?.phone || "",
         deliveryDate: slot.deliveryDate,
         day: slot.day,
         formattedDate,
         isUrgent,
         hoursLeft: diffHours,
         message: `Agency ${agency?.agencyName || "Wholesaler"} has scheduled delivery for ${slot.day} (${formattedDate}). Please place your grocery order before the slot closes!`,
+        tamilMessage,
       });
     }
 
     return reminders;
+  }
+
+  // ==========================================
+  // TAMIL WHATSAPP SLOT REMINDER GENERATION
+  // ==========================================
+
+  async getWhatsAppSlotReminder(shopId: string, slotId: string) {
+    const shop = await db.query.shops.findFirst({
+      where: eq(shops.id, shopId),
+    });
+    const slot = await db.query.deliverySlots.findFirst({
+      where: eq(deliverySlots.id, slotId),
+    });
+    if (!slot) {
+      throw new BadRequestException("Delivery slot not found");
+    }
+    const agency = await db.query.agencies.findFirst({
+      where: eq(agencies.id, slot.agencyId),
+    });
+
+    const slotDate = new Date(slot.deliveryDate);
+    const formattedDate = slotDate.toLocaleDateString("en-IN", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+
+    const tamilMessage = `🔔 *RetailBridge டெலிவரி நினைவூட்டல்* 🔔\n\nவணக்கம் *${shop?.shopName || "கடை உரிமையாளர்"}*,\n\n🏢 உங்கள் இணைக்கப்பட்ட ஏஜென்சி: *${agency?.agencyName || "ஏஜென்சி"}*\n🚚 டெலிவரி நாள்: *${slot.day}* (${formattedDate})\n\n⚠️ *தயவுசெய்து உங்கள் ஸ்லாட் முடிவடைவதற்குள் தேவையான பொருட்களை உடனே ஆர்டர் செய்யவும்!*\n(Please order your products before your slot closes)\n\nஸ்லாட் நேரம் முடிந்தவுடன் இந்த வாரத்திற்கான ஆர்டர்கள் ஏற்றுக்கொள்ளப்படாது. உடனடியாக ஆர்டர் செய்ய RetailBridge செயலியைப் பயன்படுத்தவும்.\n\nநன்றி! 🙏\nRetailBridge Support`;
+
+    const cleanPhone = (shop?.phone || "").replace(/[^0-9]/g, "");
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+    return {
+      success: true,
+      shopPhone: shop?.phone || "",
+      formattedPhone,
+      shopName: shop?.shopName || "Grocery Store",
+      agencyName: agency?.agencyName || "Agency",
+      day: slot.day,
+      formattedDate,
+      tamilMessage,
+      whatsappUrl: `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(tamilMessage)}`,
+    };
   }
 }

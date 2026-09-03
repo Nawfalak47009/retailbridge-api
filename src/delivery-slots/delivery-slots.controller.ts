@@ -117,6 +117,21 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
+  // WHATSAPP SLOT REMINDER IN TAMIL
+  // ==========================================
+
+  @Get("shop/:shopId/whatsapp-reminder/:slotId")
+  getWhatsAppSlotReminder(
+    @Param("shopId") shopId: string,
+    @Param("slotId") slotId: string,
+  ) {
+    return this.deliverySlotsService.getWhatsAppSlotReminder(
+      shopId,
+      slotId,
+    );
+  }
+
+  // ==========================================
   // SHOP → ITS DELIVERY DAYS
   // ==========================================
 
