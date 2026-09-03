@@ -936,10 +936,12 @@ if (!effectiveScheduledDate && deliveryDay) {
     agencyId: string,
   ) {
     const allOrders = await this.findByShop(userId);
-    return allOrders.filter(
+    const agencyOrders = allOrders.filter(
       (ord: any) =>
         ord.agencyId === agencyId || ord.agency?.id === agencyId,
     );
+    // Return only the single latest order for this agency
+    return agencyOrders.length > 0 ? [agencyOrders[0]] : [];
   }
 
   // ===========================
