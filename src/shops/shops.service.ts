@@ -248,6 +248,7 @@ export class ShopsService {
     const updateFields: any = {};
     if (body.address !== undefined) updateFields.address = body.address.trim();
     if (body.pincode !== undefined) updateFields.pincode = body.pincode.trim();
+    if (body.landmark !== undefined) updateFields.landmark = body.landmark ? body.landmark.trim() : null;
     if (body.shopName !== undefined && body.shopName.trim()) updateFields.shopName = body.shopName.trim();
     if (body.ownerName !== undefined && body.ownerName.trim()) updateFields.ownerName = body.ownerName.trim();
     if (body.phone !== undefined && body.phone.trim()) updateFields.phone = body.phone.trim();

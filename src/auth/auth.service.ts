@@ -152,6 +152,8 @@ async registerShop(
     address: dto.address,
 
     pincode: dto.pincode,
+
+    landmark: dto.landmark ? dto.landmark.trim() : null,
   });
 
   return {

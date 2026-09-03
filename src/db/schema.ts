@@ -95,6 +95,8 @@ export const shops = pgTable("shops", {
 
   pincode: varchar({ length: 10 }).notNull(),
 
+  landmark: varchar({ length: 255 }),
+
   image: varchar({ length: 500 }),
 
   createdAt: timestamp().defaultNow().notNull(),

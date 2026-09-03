@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
 } from "class-validator";
@@ -29,6 +30,10 @@ export class RegisterShopDto {
   @IsString()
   @IsNotEmpty()
   pincode!: string;
+
+  @IsString()
+  @IsOptional()
+  landmark?: string;
 
   @IsString()
   @IsNotEmpty()
