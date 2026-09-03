@@ -850,6 +850,12 @@ if (!effectiveScheduledDate && deliveryDay) {
         id:
           order.id,
 
+        shopId:
+          order.shopId,
+
+        agencyId:
+          order.agencyId,
+
         orderNumber:
           order.orderNumber,
 
@@ -919,6 +925,21 @@ if (!effectiveScheduledDate && deliveryDay) {
     }
 
     return response;
+  }
+
+  // ===========================
+  // SHOP - ORDERS FROM SPECIFIC AGENCY
+  // ===========================
+
+  async findByShopAndAgency(
+    userId: string,
+    agencyId: string,
+  ) {
+    const allOrders = await this.findByShop(userId);
+    return allOrders.filter(
+      (ord: any) =>
+        ord.agencyId === agencyId || ord.agency?.id === agencyId,
+    );
   }
 
   // ===========================

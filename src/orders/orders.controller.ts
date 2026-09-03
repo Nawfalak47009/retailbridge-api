@@ -98,6 +98,26 @@ export class OrdersController {
   }
 
   // =====================================
+  // SHOP - MY ORDERS WITH SPECIFIC AGENCY
+  // =====================================
+
+  @Get("shop/agency/:agencyId")
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles("SHOP")
+  findByShopAndAgency(
+    @CurrentUser() user: JwtUser,
+    @Param("agencyId") agencyId: string,
+  ) {
+    return this.ordersService.findByShopAndAgency(
+      user.id,
+      agencyId,
+    );
+  }
+
+  // =====================================
   // SINGLE ORDER
   // =====================================
 
