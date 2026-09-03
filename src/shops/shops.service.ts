@@ -414,6 +414,20 @@ export class ShopsService {
         const existingOrder = shopOrders.find((ord) => {
           if (ord.agencyId !== slot.agencyId) return false;
           if (ord.status === "CANCELLED") return false;
+
+          // Any active non-delivered order means the shop has already ordered!
+          if (
+            ord.status === "DELIVERY_SCHEDULE_PENDING" ||
+            ord.status === "PENDING" ||
+            ord.status === "ACCEPTED" ||
+            ord.status === "SCHEDULED" ||
+            ord.status === "OUT_FOR_DELIVERY" ||
+            ord.status === "PROCESSING" ||
+            ord.status === "PLACED"
+          ) {
+            return true;
+          }
+
           if (ord.slotId && ord.slotId === slot.id) return true;
 
           if (ord.scheduledDate) {
@@ -427,9 +441,7 @@ export class ShopsService {
             }
           }
 
-          const ordCreated = new Date(ord.createdAt);
-          const slotCreated = new Date(slot.createdAt);
-          return ordCreated >= slotCreated && ordCreated <= slotDateEnd;
+          return false;
         });
 
         if (!existingOrder) {

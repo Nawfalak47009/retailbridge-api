@@ -188,12 +188,20 @@ export class DeliverySlotsService {
         .set({
           scheduledDate: deliveryDate,
           slotId: deliveryDay.id,
+          status: "SCHEDULED",
         })
         .where(
           and(
             eq(orders.agencyId, dto.agencyId),
             eq(orders.shopId, dto.shopId),
-            inArray(orders.status, ["PLACED", "ACCEPTED", "PROCESSING", "PENDING", "SCHEDULED"]),
+            inArray(orders.status, [
+              "DELIVERY_SCHEDULE_PENDING",
+              "PLACED",
+              "ACCEPTED",
+              "PROCESSING",
+              "PENDING",
+              "SCHEDULED",
+            ]),
           ),
         );
     } catch (orderSyncErr) {
@@ -599,9 +607,23 @@ export class DeliverySlotsService {
         if (ord.agencyId !== slot.agencyId) return false;
         if (ord.status === "CANCELLED") return false;
 
-        // Matches slotId or matches scheduledDate on the same day
+        // Any active, non-delivered order means the shop has already ordered!
+        if (
+          ord.status === "DELIVERY_SCHEDULE_PENDING" ||
+          ord.status === "PENDING" ||
+          ord.status === "ACCEPTED" ||
+          ord.status === "SCHEDULED" ||
+          ord.status === "OUT_FOR_DELIVERY" ||
+          ord.status === "PROCESSING" ||
+          ord.status === "PLACED"
+        ) {
+          return true;
+        }
+
+        // Matches slotId
         if (ord.slotId && ord.slotId === slot.id) return true;
 
+        // Matches scheduledDate on the same day
         if (ord.scheduledDate) {
           const ordSched = new Date(ord.scheduledDate);
           if (
@@ -611,13 +633,6 @@ export class DeliverySlotsService {
           ) {
             return true;
           }
-        }
-
-        // Or placed after slot creation and pending/accepted/scheduled
-        const ordCreated = new Date(ord.createdAt);
-        const slotCreated = new Date(slot.createdAt);
-        if (ordCreated >= slotCreated && ordCreated <= slotDateEnd) {
-          return true;
         }
 
         return false;

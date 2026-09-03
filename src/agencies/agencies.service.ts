@@ -223,10 +223,13 @@ export class AgenciesService {
             return false;
           });
 
-          hasOrdered = Boolean(orderForSlot);
+          hasOrdered = Boolean(
+            orderForSlot ||
+            (activeOrder && activeOrder.status !== "DELIVERED" && activeOrder.status !== "CANCELLED")
+          );
         } else {
           // If no slot created by agency yet, check if shop placed an active non-delivered order
-          hasOrdered = Boolean(activeOrder && activeOrder.status !== "DELIVERED");
+          hasOrdered = Boolean(activeOrder && activeOrder.status !== "DELIVERED" && activeOrder.status !== "CANCELLED");
         }
       }
 
