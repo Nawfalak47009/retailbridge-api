@@ -16,9 +16,12 @@ import {
   agencyShopConnections,
   agencies,
   shops,
+  deliverySlots,
+  orders,
 } from "../db/schema";
 
 import { CreateRequestDto } from "./dto/create-request.dto";
+import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 
 @Injectable()
 export class AgencyConnectionsService {
@@ -676,7 +679,19 @@ export class AgencyConnectionsService {
       agencyName: string;
       ownerName: string;
       phone: string;
+      logo?: string | null;
       connectedAt: Date | null;
+      slot?: {
+        id?: string;
+        day: string;
+        deliveryDate: Date;
+        formattedDate: string;
+      } | null;
+      hasOrdered: boolean;
+      cardColor: "green" | "red";
+      orderStatusText: string;
+      lastOrderId?: string | null;
+      lastOrderStatus?: string | null;
     }> = [];
 
     for (
@@ -706,6 +721,75 @@ export class AgencyConnectionsService {
         continue;
       }
 
+      // 1. Get active delivery slot for this shop and agency
+      const activeSlot = await db.query.deliverySlots.findFirst({
+        where: and(
+          eq(deliverySlots.agencyId, connection.agencyId),
+          eq(deliverySlots.shopId, shopId),
+          eq(deliverySlots.isActive, "true"),
+        ),
+      });
+
+      // 2. Query shop orders for this agency
+      const agencyOrders = await db.query.orders.findMany({
+        where: and(
+          eq(orders.shopId, shopId),
+          eq(orders.agencyId, connection.agencyId),
+        ),
+        orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+      });
+
+      let slotInfo: any = null;
+      let hasOrdered = false;
+      const activeOrder = agencyOrders.find((ord) => ord.status !== "CANCELLED");
+
+      if (activeSlot) {
+        const nextDate = calculateNextDeliveryDate(activeSlot, new Date());
+        const formattedDate = nextDate.toLocaleDateString("en-IN", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+
+        slotInfo = {
+          id: activeSlot.id,
+          day: activeSlot.day,
+          deliveryDate: nextDate,
+          formattedDate,
+        };
+
+        const slotDate = new Date(nextDate);
+        const slotDateEnd = new Date(nextDate);
+        slotDateEnd.setHours(23, 59, 59, 999);
+
+        const orderForSlot = agencyOrders.find((ord) => {
+          if (ord.status === "CANCELLED") return false;
+          if (ord.slotId && ord.slotId === activeSlot.id) return true;
+          if (ord.scheduledDate) {
+            const ordSched = new Date(ord.scheduledDate);
+            if (
+              ordSched.getFullYear() === slotDate.getFullYear() &&
+              ordSched.getMonth() === slotDate.getMonth() &&
+              ordSched.getDate() === slotDate.getDate()
+            ) {
+              return true;
+            }
+          }
+          const ordCreated = new Date(ord.createdAt);
+          const slotCreated = new Date(activeSlot.createdAt);
+          return ordCreated >= slotCreated && ordCreated <= slotDateEnd;
+        });
+
+        hasOrdered = Boolean(orderForSlot);
+      } else {
+        // If no slot created by agency yet, check if shop placed an active order
+        hasOrdered = Boolean(activeOrder);
+      }
+
+      const orderStatusText = hasOrdered
+        ? (slotInfo?.day ? `Ordered for ${slotInfo.day} Delivery` : "Order Placed & Scheduled")
+        : (slotInfo?.day ? `Not Ordered for ${slotInfo.day}` : "Not Ordered Yet");
+
       result.push({
         connectionId:
           connection.connectionId,
@@ -722,8 +806,18 @@ export class AgencyConnectionsService {
         phone:
           agency.phone,
 
+        logo:
+          agency.logo || null,
+
         connectedAt:
           connection.connectedAt,
+
+        slot: slotInfo,
+        hasOrdered,
+        cardColor: hasOrdered ? "green" : "red",
+        orderStatusText,
+        lastOrderId: activeOrder?.id || null,
+        lastOrderStatus: activeOrder?.status || null,
       });
     }
 
