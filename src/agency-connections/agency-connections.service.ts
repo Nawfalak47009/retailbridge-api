@@ -762,9 +762,33 @@ export class AgencyConnectionsService {
         const slotDateEnd = new Date(nextDate);
         slotDateEnd.setHours(23, 59, 59, 999);
 
+        // Previous cycle cutoff (7 days before slot)
+        const cycleStart = new Date(slotDate);
+        cycleStart.setDate(cycleStart.getDate() - 7);
+        cycleStart.setHours(0, 0, 0, 0);
+
         const orderForSlot = agencyOrders.find((ord) => {
           if (ord.status === "CANCELLED") return false;
-          if (ord.slotId && ord.slotId === activeSlot.id) return true;
+
+          // 1. Explicit slot match
+          if (ord.slotId && ord.slotId === activeSlot.id) {
+            if (ord.scheduledDate) {
+              const ordSched = new Date(ord.scheduledDate);
+              if (
+                ordSched.getFullYear() === slotDate.getFullYear() &&
+                ordSched.getMonth() === slotDate.getMonth() &&
+                ordSched.getDate() === slotDate.getDate()
+              ) {
+                return true;
+              }
+            }
+            const ordCreated = new Date(ord.createdAt);
+            if (ordCreated >= cycleStart && ordCreated <= slotDateEnd && ord.status !== "DELIVERED") {
+              return true;
+            }
+          }
+
+          // 2. Scheduled date matches slot date
           if (ord.scheduledDate) {
             const ordSched = new Date(ord.scheduledDate);
             if (
@@ -775,15 +799,20 @@ export class AgencyConnectionsService {
               return true;
             }
           }
+
+          // 3. Active order created in this cycle before the slot date
           const ordCreated = new Date(ord.createdAt);
-          const slotCreated = new Date(activeSlot.createdAt);
-          return ordCreated >= slotCreated && ordCreated <= slotDateEnd;
+          if (ordCreated >= cycleStart && ordCreated <= slotDateEnd && ord.status !== "DELIVERED") {
+            return true;
+          }
+
+          return false;
         });
 
         hasOrdered = Boolean(orderForSlot);
       } else {
-        // If no slot created by agency yet, check if shop placed an active order
-        hasOrdered = Boolean(activeOrder);
+        // If no slot created by agency yet, check if shop placed an active non-delivered order
+        hasOrdered = Boolean(activeOrder && activeOrder.status !== "DELIVERED");
       }
 
       const orderStatusText = hasOrdered

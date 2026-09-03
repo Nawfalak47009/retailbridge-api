@@ -2,9 +2,10 @@ import {
   Injectable,
 } from "@nestjs/common";
 
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 import { db } from "../db";
+import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 
 import {
   agencies,
@@ -15,6 +16,7 @@ import {
   orders,
   orderItems,
   shops,
+  deliverySlots,
 } from "../db/schema";
 
 @Injectable()
@@ -50,6 +52,15 @@ export class AgenciesService {
       shopCount: number;
       categories: string[];
       connected: boolean;
+      slot?: {
+        id?: string;
+        day: string;
+        deliveryDate: Date;
+        formattedDate: string;
+      } | null;
+      hasOrdered?: boolean;
+      cardColor?: "green" | "red";
+      orderStatusText?: string;
     }[] = [];
 
     for (
@@ -124,6 +135,105 @@ export class AgenciesService {
         ),
       ];
 
+      let slotInfo: any = null;
+      let hasOrdered = false;
+
+      if (currentShopId && isConnected) {
+        const activeSlot = await db.query.deliverySlots.findFirst({
+          where: and(
+            eq(deliverySlots.agencyId, agency.id),
+            eq(deliverySlots.shopId, currentShopId),
+            eq(deliverySlots.isActive, "true"),
+          ),
+        });
+
+        const agencyOrders = await db.query.orders.findMany({
+          where: and(
+            eq(orders.shopId, currentShopId),
+            eq(orders.agencyId, agency.id),
+          ),
+          orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+        });
+
+        const activeOrder = agencyOrders.find((ord) => ord.status !== "CANCELLED");
+
+        if (activeSlot) {
+          const nextDate = calculateNextDeliveryDate(activeSlot, new Date());
+          const formattedDate = nextDate.toLocaleDateString("en-IN", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
+
+          slotInfo = {
+            id: activeSlot.id,
+            day: activeSlot.day,
+            deliveryDate: nextDate,
+            formattedDate,
+          };
+
+          const slotDate = new Date(nextDate);
+          const slotDateEnd = new Date(nextDate);
+          slotDateEnd.setHours(23, 59, 59, 999);
+
+          // Previous cycle end / cutoff (7 days before this slot date)
+          const cycleStart = new Date(slotDate);
+          cycleStart.setDate(cycleStart.getDate() - 7);
+          cycleStart.setHours(0, 0, 0, 0);
+
+          const orderForSlot = agencyOrders.find((ord) => {
+            if (ord.status === "CANCELLED") return false;
+
+            // 1. Explicit slot ID match
+            if (ord.slotId && ord.slotId === activeSlot.id) {
+              if (ord.scheduledDate) {
+                const ordSched = new Date(ord.scheduledDate);
+                if (
+                  ordSched.getFullYear() === slotDate.getFullYear() &&
+                  ordSched.getMonth() === slotDate.getMonth() &&
+                  ordSched.getDate() === slotDate.getDate()
+                ) {
+                  return true;
+                }
+              }
+              const ordCreated = new Date(ord.createdAt);
+              if (ordCreated >= cycleStart && ordCreated <= slotDateEnd && ord.status !== "DELIVERED") {
+                return true;
+              }
+            }
+
+            // 2. Scheduled date matches slot date
+            if (ord.scheduledDate) {
+              const ordSched = new Date(ord.scheduledDate);
+              if (
+                ordSched.getFullYear() === slotDate.getFullYear() &&
+                ordSched.getMonth() === slotDate.getMonth() &&
+                ordSched.getDate() === slotDate.getDate()
+              ) {
+                return true;
+              }
+            }
+
+            // 3. Active order created in this cycle before the slot date
+            const ordCreated = new Date(ord.createdAt);
+            if (ordCreated >= cycleStart && ordCreated <= slotDateEnd && ord.status !== "DELIVERED") {
+              return true;
+            }
+
+            return false;
+          });
+
+          hasOrdered = Boolean(orderForSlot);
+        } else {
+          // If no slot created by agency yet, check if shop placed an active non-delivered order
+          hasOrdered = Boolean(activeOrder && activeOrder.status !== "DELIVERED");
+        }
+      }
+
+      const orderStatusText = hasOrdered
+        ? (slotInfo?.day ? `Ordered for ${slotInfo.day} Delivery` : "Order Placed & Scheduled")
+        : (slotInfo?.day ? `Not Ordered for ${slotInfo.day}` : "Not Ordered Yet");
+
       result.push({
         id: agency.id,
 
@@ -154,6 +264,10 @@ export class AgenciesService {
         categories,
 
         connected: isConnected,
+        slot: slotInfo,
+        hasOrdered: isConnected ? hasOrdered : false,
+        cardColor: isConnected ? (hasOrdered ? "green" : "red") : undefined,
+        orderStatusText: isConnected ? orderStatusText : undefined,
       });
     }
 
