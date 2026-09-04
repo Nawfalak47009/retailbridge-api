@@ -271,10 +271,12 @@ export class AgencyConnectionsService {
           shop: shop
             ? {
                 id: shop.id,
+                customId: (shop as any)?.customId || null,
                 shopName: shop.shopName,
                 ownerName: shop.ownerName,
                 phone: shop.phone,
                 address: shop.address,
+                landmark: (shop as any)?.landmark || null,
                 pincode: shop.pincode,
                 image: (shop as any)?.image || null,
               }
@@ -925,10 +927,12 @@ export class AgencyConnectionsService {
     const result: Array<{
       connectionId: string;
       shopId: string;
+      customId?: string | null;
       shopName: string;
       ownerName: string;
       phone: string;
       address: string | null;
+      landmark?: string | null;
       pincode: string | null;
       image?: string | null;
       connectedAt: Date | null;
@@ -968,6 +972,9 @@ export class AgencyConnectionsService {
         shopId:
           shop.id,
 
+        customId:
+          (shop as any)?.customId || null,
+
         shopName:
           shop.shopName,
 
@@ -979,6 +986,9 @@ export class AgencyConnectionsService {
 
         address:
           shop.address,
+
+        landmark:
+          (shop as any)?.landmark || null,
 
         pincode:
           shop.pincode,
