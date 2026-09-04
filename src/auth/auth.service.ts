@@ -56,6 +56,48 @@ async registerAgency(
       12,
     );
 
+  // Determine category prefix
+  const rawCat = (dto.category || "").trim().toUpperCase();
+  let prefix = "LCL";
+  if (rawCat.includes("HUL") || rawCat.includes("HIND")) {
+    prefix = "HUL";
+  } else if (rawCat.includes("ITC")) {
+    prefix = "ITC";
+  } else if (rawCat.includes("CMB") || rawCat.includes("COMBINE") || rawCat.includes("MULTI")) {
+    prefix = "CMB";
+  } else if (rawCat.includes("HMP") || rawCat.includes("HOME")) {
+    prefix = "HMP";
+  } else if (rawCat.includes("LCL") || rawCat.includes("LOCAL")) {
+    prefix = "LCL";
+  } else if (rawCat.length >= 3) {
+    prefix = rawCat.slice(0, 3);
+  }
+
+  const currentYear = new Date().getFullYear();
+  const prefixYear = `${prefix}${currentYear}`;
+
+  const existingAgenciesWithPrefix = await db.query.agencies.findMany({
+    where: (agenciesTable, { like }) => like(agenciesTable.customId, `${prefixYear}%`),
+  });
+
+  let nextNum = 1;
+  if (existingAgenciesWithPrefix && existingAgenciesWithPrefix.length > 0) {
+    const numbers = existingAgenciesWithPrefix
+      .map((a) => {
+        const numStr = a.customId ? a.customId.replace(prefixYear, "") : "";
+        const parsed = parseInt(numStr, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })
+      .filter((n) => n > 0);
+    if (numbers.length > 0) {
+      nextNum = Math.max(...numbers) + 1;
+    } else {
+      nextNum = existingAgenciesWithPrefix.length + 1;
+    }
+  }
+
+  const agencyCustomId = `${prefixYear}${String(nextNum).padStart(3, "0")}`;
+
   // Create User
   const [user] = await db
     .insert(users)
@@ -63,6 +105,7 @@ async registerAgency(
       email: dto.email,
       password: hashed,
       role: "AGENCY",
+      customId: agencyCustomId,
     })
     .returning();
 
@@ -71,12 +114,11 @@ async registerAgency(
     .insert(agencies)
     .values({
       userId: user.id,
-      agencyName:
-        dto.agencyName,
-      ownerName:
-        dto.ownerName,
-      phone:
-        dto.phone,
+      agencyName: dto.agencyName,
+      ownerName: dto.ownerName,
+      phone: dto.phone,
+      category: prefix,
+      customId: agencyCustomId,
     })
     .returning();
 
@@ -85,20 +127,18 @@ async registerAgency(
     .insert(agencyProfiles)
     .values({
       agencyId: agency.id,
-      address:
-        dto.address,
-      gst:
-        dto.gst,
+      address: dto.address,
+      gst: dto.gst,
       logo: "",
-      description:
-        dto.description ?? "",
+      description: dto.description ?? "",
     });
 
   return {
     success: true,
-    message:
-      "Agency registered successfully. Waiting for admin approval.",
+    message: `Agency registered successfully with ID ${agencyCustomId}. Waiting for admin approval.`,
     id: user.id,
+    customId: agencyCustomId,
+    agencyId: agency.id,
   };
 }
 
@@ -129,6 +169,30 @@ async registerShop(
       12,
     );
 
+  const cleanPincode = (dto.pincode || "600001").trim();
+
+  const existingShopsWithPincode = await db.query.shops.findMany({
+    where: (shopsTable, { like }) => like(shopsTable.customId, `${cleanPincode}-%`),
+  });
+
+  let nextShopNum = 1;
+  if (existingShopsWithPincode && existingShopsWithPincode.length > 0) {
+    const numbers = existingShopsWithPincode
+      .map((s) => {
+        const parts = (s.customId || "").split("-");
+        const parsed = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })
+      .filter((n) => n > 0);
+    if (numbers.length > 0) {
+      nextShopNum = Math.max(...numbers) + 1;
+    } else {
+      nextShopNum = existingShopsWithPincode.length + 1;
+    }
+  }
+
+  const shopCustomId = `${cleanPincode}-${String(nextShopNum).padStart(3, "0")}`;
+
   // Create User
   const [user] = await db
     .insert(users)
@@ -136,31 +200,31 @@ async registerShop(
       email: dto.email,
       password: hashed,
       role: "SHOP",
+      customId: shopCustomId,
     })
     .returning();
 
   // Create independent Grocery Shop
-  await db.insert(shops).values({
-    userId: user.id,
-
-    shopName: dto.shopName,
-
-    ownerName: dto.ownerName,
-
-    phone: dto.phone,
-
-    address: dto.address,
-
-    pincode: dto.pincode,
-
-    landmark: dto.landmark ? dto.landmark.trim() : null,
-  });
+  const [shop] = await db
+    .insert(shops)
+    .values({
+      userId: user.id,
+      shopName: dto.shopName,
+      ownerName: dto.ownerName,
+      phone: dto.phone,
+      address: dto.address,
+      pincode: cleanPincode,
+      landmark: dto.landmark ? dto.landmark.trim() : null,
+      customId: shopCustomId,
+    })
+    .returning();
 
   return {
     success: true,
-    message:
-      "Shop registered successfully. Waiting for admin approval.",
+    message: `Shop registered successfully with ID ${shopCustomId}. Waiting for admin approval.`,
     id: user.id,
+    customId: shopCustomId,
+    shopId: shop.id,
   };
 }
 
@@ -262,6 +326,20 @@ async login(dto: LoginDto) {
     }
   }
 
+  let customId: string | null = user.customId ?? null;
+  if (!customId && user.role === "AGENCY") {
+    const agency = await db.query.agencies.findFirst({
+      where: eq(agencies.userId, user.id),
+    });
+    if (agency?.customId) customId = agency.customId;
+  }
+  if (!customId && user.role === "SHOP") {
+    const shop = await db.query.shops.findFirst({
+      where: eq(shops.userId, user.id),
+    });
+    if (shop?.customId) customId = shop.customId;
+  }
+
   return {
     success: true,
 
@@ -272,6 +350,7 @@ async login(dto: LoginDto) {
       email: user.email,
       role: user.role,
       status: user.status,
+      customId,
 
       agencyId,
       shopId,

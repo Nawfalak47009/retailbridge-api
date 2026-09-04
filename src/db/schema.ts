@@ -46,6 +46,10 @@ export const users = pgTable(
       length: 500,
     }),
 
+    customId: varchar({
+      length: 50,
+    }),
+
     createdAt:
       timestamp().defaultNow(),
   },
@@ -77,6 +81,14 @@ export const agencies = pgTable(
     logo: varchar({
       length: 500,
     }),
+
+    category: varchar({
+      length: 50,
+    }),
+
+    customId: varchar({
+      length: 50,
+    }),
   }
 );
 
@@ -96,6 +108,8 @@ export const shops = pgTable("shops", {
   pincode: varchar({ length: 10 }).notNull(),
 
   landmark: varchar({ length: 255 }),
+
+  customId: varchar({ length: 50 }),
 
   image: varchar({ length: 500 }),
 
