@@ -24,9 +24,13 @@ import {
   CreateDeliverySlotDto,
 } from "./dto/create-delivery-slot.dto";
 import { calculateNextDeliveryDate } from "./delivery-slots.utils";
+import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 @Injectable()
 export class DeliverySlotsService {
+  constructor(
+    private readonly pushNotificationsService: PushNotificationsService,
+  ) {}
   // ==========================================
   // CREATE DELIVERY DAY
   // AGENCY ONLY
@@ -206,6 +210,37 @@ export class DeliverySlotsService {
         );
     } catch (orderSyncErr) {
       console.log("Order delivery slot sync note:", orderSyncErr);
+    }
+
+    // ==========================================
+    // NOTIFY GROCERY USER VIA PUSH (even when app is closed / mobile is locked)
+    // ==========================================
+    try {
+      const shop = await db.query.shops.findFirst({
+        where: eq(shops.id, dto.shopId),
+      });
+
+      if (shop?.userId) {
+        const formattedDate = deliveryDate.toLocaleDateString("en-IN", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+        await this.pushNotificationsService.sendToUser(shop.userId, {
+          title: "📅 Delivery Day Scheduled!",
+          body: `${agency.agencyName || "Agency"} scheduled your delivery for ${day} (${formattedDate}).`,
+          screenToOpen: "/(grocery)/orders",
+          channelId: "orders",
+          data: {
+            agencyId: agency.id,
+            shopId: shop.id,
+            day,
+            deliveryDate: deliveryDate.toISOString(),
+          },
+        });
+      }
+    } catch (pushErr) {
+      console.log("Error dispatching delivery slot push notification:", pushErr);
     }
 
     return {

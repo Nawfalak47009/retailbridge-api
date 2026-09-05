@@ -50,6 +50,10 @@ export const users = pgTable(
       length: 50,
     }),
 
+    pushToken: varchar({
+      length: 500,
+    }),
+
     createdAt:
       timestamp().defaultNow(),
   },

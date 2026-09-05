@@ -28,11 +28,13 @@ import { S3Service } from "../documents/s3.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
+import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly s3Service: S3Service,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   // ===========================
@@ -1692,6 +1694,60 @@ if (!effectiveScheduledDate && deliveryDay) {
           description:
             "Order Delivered (+5 Coins)",
         });
+    }
+
+    // ==========================================
+    // NOTIFY GROCERY USER VIA PUSH (even when app is closed / mobile is locked)
+    // ==========================================
+    try {
+      const shop = await db.query.shops.findFirst({
+        where: eq(shops.id, order.shopId),
+      });
+
+      if (shop?.userId) {
+        const orderShort = order.id.slice(0, 8);
+        const agencyName = agency.agencyName || "Agency";
+        let title = "📋 Order Status Updated";
+        let body = `Your order #${orderShort} is now ${dto.status.replace(/_/g, " ")}.`;
+
+        switch (dto.status) {
+          case "ACCEPTED":
+            title = "✅ Order Accepted!";
+            body = `${agencyName} has accepted and confirmed your order #${orderShort}.`;
+            break;
+          case "SCHEDULED":
+            title = "📅 Delivery Scheduled!";
+            body = `Your order #${orderShort} has been scheduled for delivery.`;
+            break;
+          case "OUT_FOR_DELIVERY":
+            title = "🚚 Out For Delivery!";
+            body = `Order #${orderShort} is on the delivery vehicle and heading to your shop!`;
+            break;
+          case "DELIVERED":
+            title = "🎉 Order Delivered!";
+            body = `Order #${orderShort} has been delivered successfully. (+5 coins earned)`;
+            break;
+          case "CANCELLED":
+            title = "❌ Order Cancelled";
+            body = `Order #${orderShort} was cancelled by ${agencyName}.`;
+            break;
+        }
+
+        await this.pushNotificationsService.sendToUser(shop.userId, {
+          title,
+          body,
+          screenToOpen: "/(grocery)/orders",
+          channelId: "orders",
+          data: {
+            orderId: order.id,
+            orderNumber: orderShort,
+            status: dto.status,
+            agencyName,
+          },
+        });
+      }
+    } catch (pushErr) {
+      console.log("Error dispatching order status push notification:", pushErr);
     }
 
     // ==========================================

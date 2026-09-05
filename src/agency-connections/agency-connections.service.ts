@@ -22,9 +22,13 @@ import {
 
 import { CreateRequestDto } from "./dto/create-request.dto";
 import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
+import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 @Injectable()
 export class AgencyConnectionsService {
+  constructor(
+    private readonly pushNotificationsService: PushNotificationsService,
+  ) {}
 
   // ==========================================
   // SEND CONNECTION REQUEST
@@ -184,6 +188,55 @@ export class AgencyConnectionsService {
             "PENDING",
         })
         .returning();
+
+    // Dispatch push notification to recipient
+    try {
+      if (dto.requestedBy === "SHOP") {
+        const agency = await db.query.agencies.findFirst({
+          where: eq(agencies.id, actualAgencyId),
+        });
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, actualShopId),
+        });
+        if (agency?.userId) {
+          const shopName = shop?.shopName || "Grocery Store";
+          await this.pushNotificationsService.sendToUser(agency.userId, {
+            title: "🤝 New Connection Request",
+            body: `${shopName} sent a wholesale connection request to your agency.`,
+            screenToOpen: "/(agency)/connection-requests",
+            channelId: "connections",
+            data: {
+              requestId: request.id,
+              shopId: actualShopId,
+              shopName,
+            },
+          });
+        }
+      } else if (dto.requestedBy === "AGENCY") {
+        const agency = await db.query.agencies.findFirst({
+          where: eq(agencies.id, actualAgencyId),
+        });
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, actualShopId),
+        });
+        if (shop?.userId) {
+          const agencyName = agency?.agencyName || "Agency";
+          await this.pushNotificationsService.sendToUser(shop.userId, {
+            title: "🤝 New Connection Request",
+            body: `${agencyName} wants to connect with your shop.`,
+            screenToOpen: "/(grocery)/browse-agencies",
+            channelId: "connections",
+            data: {
+              requestId: request.id,
+              agencyId: actualAgencyId,
+              agencyName,
+            },
+          });
+        }
+      }
+    } catch (pushErr) {
+      console.log("Error dispatching connection request push:", pushErr);
+    }
 
     return {
       success: true,
@@ -471,6 +524,55 @@ export class AgencyConnectionsService {
           id,
         ),
       );
+
+    // Dispatch push notification to the requester (even when app is closed / mobile is locked)
+    try {
+      if (request.requestedBy === "SHOP") {
+        const agency = await db.query.agencies.findFirst({
+          where: eq(agencies.id, request.agencyId),
+        });
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, request.shopId),
+        });
+        if (shop?.userId) {
+          const agencyName = agency?.agencyName || "Agency";
+          await this.pushNotificationsService.sendToUser(shop.userId, {
+            title: "🎉 Connection Request Accepted!",
+            body: `${agencyName} accepted your connection request. You can now place wholesale orders!`,
+            screenToOpen: "/(grocery)/browse-agencies",
+            channelId: "connections",
+            data: {
+              requestId: id,
+              agencyId: request.agencyId,
+              agencyName,
+            },
+          });
+        }
+      } else if (request.requestedBy === "AGENCY") {
+        const agency = await db.query.agencies.findFirst({
+          where: eq(agencies.id, request.agencyId),
+        });
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, request.shopId),
+        });
+        if (agency?.userId) {
+          const shopName = shop?.shopName || "Grocery Store";
+          await this.pushNotificationsService.sendToUser(agency.userId, {
+            title: "🎉 Connection Request Accepted!",
+            body: `${shopName} accepted your connection request.`,
+            screenToOpen: "/(agency)/connection-requests",
+            channelId: "connections",
+            data: {
+              requestId: id,
+              shopId: request.shopId,
+              shopName,
+            },
+          });
+        }
+      }
+    } catch (pushErr) {
+      console.log("Error dispatching accept request push:", pushErr);
+    }
 
     return {
       success: true,

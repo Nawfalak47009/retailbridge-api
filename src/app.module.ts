@@ -13,10 +13,11 @@ import { ProfilesModule } from './profiles/profiles.module';
 import { CartModule } from './cart/cart.module';
 import { AgencyConnectionsModule } from './agency-connections/agency-connections.module';
 import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 
 @Module({
-  imports: [AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, ProfilesModule, CartModule, AgencyConnectionsModule, DeliverySlotsModule],
+  imports: [AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, ProfilesModule, CartModule, AgencyConnectionsModule, DeliverySlotsModule, NotificationsModule],
   controllers: [AppController],
   providers: [AppService],
 })

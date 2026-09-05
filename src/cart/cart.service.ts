@@ -30,11 +30,13 @@ import {
 import { CheckoutDto } from "./dto/checkout.dto";
 import { AddCartDto } from "./dto/add-cart.dto";
 import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
+import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 @Injectable()
 export class CartService {
   constructor(
     private readonly s3Service: S3Service,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   // ==========================================
@@ -969,6 +971,28 @@ export class CartService {
       createdOrders.push(
         order,
       );
+
+      // Send remote push notification to agency user (active even when app is closed / mobile screen is locked)
+      try {
+        if (agency.userId) {
+          const shopName = shop.shopName || "Grocery Store";
+          const orderShort = order.id.slice(0, 8);
+          await this.pushNotificationsService.sendToUser(agency.userId, {
+            title: "🛍️ New Order Received!",
+            body: `${shopName} placed new order #${orderShort} for ₹${totalAmount.toLocaleString("en-IN")}.`,
+            screenToOpen: "/(agency)/orders",
+            channelId: "orders",
+            data: {
+              orderId: order.id,
+              orderNumber: orderShort,
+              shopName,
+              amount: totalAmount,
+            },
+          });
+        }
+      } catch (pushErr) {
+        console.log("Error dispatching order push notification:", pushErr);
+      }
     }
 
     // ==========================================
