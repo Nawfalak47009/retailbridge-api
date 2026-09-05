@@ -816,11 +816,15 @@ export class CartService {
             ? Number((pricePerCase / unitsPerCase).toFixed(2))
             : pricePerCase;
 
-        const itemTotal =
-          Math.round(
-            (casesCount * pricePerCase) +
-            (looseCount * pricePerUnit),
-          );
+        const gstPercent = Math.max(
+          0,
+          parseFloat((product as any).gstPercent || "0") || 0,
+        );
+        const caseGstAmount = (pricePerCase * gstPercent) / 100;
+        const casesTotal = casesCount * (pricePerCase + caseGstAmount);
+        const looseTotal = looseCount * pricePerUnit; // Strictly 0% GST on loose products
+
+        const itemTotal = Math.round(casesTotal + looseTotal);
 
         totalAmount += itemTotal;
       }

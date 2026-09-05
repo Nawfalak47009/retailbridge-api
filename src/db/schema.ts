@@ -183,6 +183,10 @@ export const products = pgTable(
       length: 50,
     }),
 
+    gstPercent: varchar({
+      length: 20,
+    }).default("0"),
+
     stock: varchar({
       length: 50,
     }).notNull(),

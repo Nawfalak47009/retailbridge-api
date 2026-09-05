@@ -61,6 +61,7 @@ export class ProductsService {
             dto.quantityPerUnit,
           price: dto.price,
           loosePrice: dto.loosePrice,
+          gstPercent: dto.gstPercent || "0",
           stock: dto.stock,
           isActive:
             dto.isActive ?? "true",

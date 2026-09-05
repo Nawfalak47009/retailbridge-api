@@ -26,6 +26,10 @@ export class CreateProductDto {
   @IsString()
   loosePrice?: string;
 
+  @IsOptional()
+  @IsString()
+  gstPercent?: string;
+
   @IsString()
   stock!: string;
 

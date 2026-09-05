@@ -358,6 +358,7 @@ export class OrdersService {
 
       let totalAmount = 0;
       let totalQuantity = 0;
+      let totalGstAmount = 0;
 
       for (
         const item of items
@@ -404,17 +405,24 @@ export class OrdersService {
             ? Number((pricePerCase / unitsPerCase).toFixed(2))
             : pricePerCase;
 
-        const itemSubtotal =
-          Math.round(
-            (cases * pricePerCase) +
-            (loose * pricePerUnit),
-          );
+        const gstPercent = Math.max(
+          0,
+          parseFloat((product as any).gstPercent || "0") || 0,
+        );
+        const caseGstAmount = (pricePerCase * gstPercent) / 100;
+        const totalCaseGst = cases * caseGstAmount;
+        const casesSubtotal = Math.round(cases * (pricePerCase + caseGstAmount));
+        const looseSubtotal = Math.round(loose * pricePerUnit); // Strictly 0% GST on loose
+        const itemSubtotal = casesSubtotal + looseSubtotal;
 
         totalAmount +=
           itemSubtotal;
 
         totalQuantity +=
           totalUnits;
+
+        totalGstAmount +=
+          totalCaseGst;
 
         let packBreakdown = "";
         if (cases > 0 && loose > 0) {
@@ -449,6 +457,10 @@ export class OrdersService {
           pricePerCase,
           pricePerUnit,
           loosePrice: product.loosePrice,
+          gstPercent: (product as any).gstPercent || "0",
+          caseGstAmount: Number(caseGstAmount.toFixed(2)),
+          totalCaseGst: Number(totalCaseGst.toFixed(2)),
+          pricePerCaseWithGst: Number((pricePerCase + caseGstAmount).toFixed(2)),
 
           subtotal:
             itemSubtotal,
@@ -551,6 +563,9 @@ export class OrdersService {
 
         totalAmount:
           totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
+
+        totalGstAmount:
+          Math.round(totalGstAmount),
 
         totalQuantity,
 
@@ -680,6 +695,7 @@ export class OrdersService {
 
       let totalAmount = 0;
       let totalQuantity = 0;
+      let totalGstAmount = 0;
 
       for (
         const item of items
@@ -726,17 +742,24 @@ export class OrdersService {
             ? Number((pricePerCase / unitsPerCase).toFixed(2))
             : pricePerCase;
 
-        const itemSubtotal =
-          Math.round(
-            (cases * pricePerCase) +
-            (loose * pricePerUnit),
-          );
+        const gstPercent = Math.max(
+          0,
+          parseFloat((product as any).gstPercent || "0") || 0,
+        );
+        const caseGstAmount = (pricePerCase * gstPercent) / 100;
+        const totalCaseGst = cases * caseGstAmount;
+        const casesSubtotal = Math.round(cases * (pricePerCase + caseGstAmount));
+        const looseSubtotal = Math.round(loose * pricePerUnit); // Strictly 0% GST on loose
+        const itemSubtotal = casesSubtotal + looseSubtotal;
 
         totalAmount +=
           itemSubtotal;
 
         totalQuantity +=
           totalUnits;
+
+        totalGstAmount +=
+          totalCaseGst;
 
         let packBreakdown = "";
         if (cases > 0 && loose > 0) {
@@ -771,6 +794,10 @@ export class OrdersService {
           pricePerCase,
           pricePerUnit,
           loosePrice: product.loosePrice,
+          gstPercent: (product as any).gstPercent || "0",
+          caseGstAmount: Number(caseGstAmount.toFixed(2)),
+          totalCaseGst: Number(totalCaseGst.toFixed(2)),
+          pricePerCaseWithGst: Number((pricePerCase + caseGstAmount).toFixed(2)),
 
           subtotal:
             itemSubtotal,
@@ -869,6 +896,9 @@ if (!effectiveScheduledDate && deliveryDay) {
           order.remarks,
 
         totalAmount,
+
+        totalGstAmount:
+          Math.round(totalGstAmount),
 
         totalQuantity,
 
@@ -1055,6 +1085,7 @@ if (!effectiveScheduledDate && deliveryDay) {
 
     let totalAmount = 0;
     let totalQuantity = 0;
+    let totalGstAmount = 0;
 
     for (
       const item of items
@@ -1101,17 +1132,24 @@ if (!effectiveScheduledDate && deliveryDay) {
           ? Number((pricePerCase / unitsPerCase).toFixed(2))
           : pricePerCase;
 
-      const itemSubtotal =
-        Math.round(
-          (cases * pricePerCase) +
-          (loose * pricePerUnit),
-        );
+      const gstPercent = Math.max(
+        0,
+        parseFloat((product as any).gstPercent || "0") || 0,
+      );
+      const caseGstAmount = (pricePerCase * gstPercent) / 100;
+      const totalCaseGst = cases * caseGstAmount;
+      const casesSubtotal = Math.round(cases * (pricePerCase + caseGstAmount));
+      const looseSubtotal = Math.round(loose * pricePerUnit); // Strictly 0% GST on loose
+      const itemSubtotal = casesSubtotal + looseSubtotal;
 
       totalAmount +=
         itemSubtotal;
 
       totalQuantity +=
         totalUnits;
+
+      totalGstAmount +=
+        totalCaseGst;
 
       let packBreakdown = "";
       if (cases > 0 && loose > 0) {
@@ -1146,6 +1184,10 @@ if (!effectiveScheduledDate && deliveryDay) {
         pricePerCase,
         pricePerUnit,
         loosePrice: product.loosePrice,
+        gstPercent: (product as any).gstPercent || "0",
+        caseGstAmount: Number(caseGstAmount.toFixed(2)),
+        totalCaseGst: Number(totalCaseGst.toFixed(2)),
+        pricePerCaseWithGst: Number((pricePerCase + caseGstAmount).toFixed(2)),
 
         subtotal:
           itemSubtotal,
@@ -1294,6 +1336,9 @@ if (!effectiveScheduledDate && deliveryDay) {
 
       totalAmount:
         totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
+
+      totalGstAmount:
+        Math.round(totalGstAmount),
 
       agency:
         agency && {
