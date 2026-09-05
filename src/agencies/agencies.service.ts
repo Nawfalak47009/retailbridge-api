@@ -42,6 +42,7 @@ export class AgenciesService {
 
     const result: {
       id: string;
+      customId?: string;
       agencyName: string;
       ownerName: string;
       phone: string;
@@ -239,6 +240,7 @@ export class AgenciesService {
 
       result.push({
         id: agency.id,
+        customId: (agency as any)?.customId || "",
 
         agencyName:
           agency.agencyName,
@@ -338,6 +340,7 @@ export class AgenciesService {
 
       agency: {
         id: agency.id,
+        customId: (agency as any)?.customId || "",
 
         agencyName:
           agency.agencyName,
@@ -581,10 +584,21 @@ export class AgenciesService {
         )
         .slice(0, 5);
 
+    let agencyCustomId = (agency as any)?.customId;
+    if (!agencyCustomId) {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+      agencyCustomId = user?.customId || "";
+    }
+
     return {
       success: true,
 
       agency: {
+        id: agency.id,
+        customId: agencyCustomId || "",
+
         agencyName:
           agency.agencyName,
 

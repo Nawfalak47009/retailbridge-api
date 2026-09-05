@@ -181,12 +181,22 @@ export class ShopsService {
 
       shop: {
         ...shop,
+        customId: (shop as any)?.customId || user?.customId || null,
         image: (shop as any)?.image || shopPhotoDoc?.documentUrl || null,
         rewardPoints: realRewardPoints,
         walletBalance: 0,
         documents: documentsMap,
         userStatus: user?.status || "PENDING",
       },
+
+      user: user
+        ? {
+            id: user.id,
+            customId: user.customId,
+            email: user.email,
+            role: user.role,
+          }
+        : null,
 
       documents: documentsMap,
 
@@ -479,6 +489,7 @@ export class ShopsService {
 
       shop: {
         ...shop,
+        customId: (shop as any)?.customId || null,
         rewardPoints: realRewardPoints,
       },
 
