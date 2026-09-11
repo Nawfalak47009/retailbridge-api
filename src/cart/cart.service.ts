@@ -247,18 +247,6 @@ export class CartService {
       const cart of userCarts
     ) {
       // ========================================
-      // AGENCY
-      // ========================================
-
-      const agency =
-        await db.query.agencies.findFirst({
-          where: eq(
-            agencies.id,
-            cart.agencyId,
-          ),
-        });
-
-      // ========================================
       // CART ITEMS
       // ========================================
 
@@ -267,6 +255,24 @@ export class CartService {
           where: eq(
             cartItems.cartId,
             cart.id,
+          ),
+        });
+
+      if (items.length === 0) {
+        // Clean up orphaned empty cart record
+        await db.delete(carts).where(eq(carts.id, cart.id));
+        continue;
+      }
+
+      // ========================================
+      // AGENCY
+      // ========================================
+
+      const agency =
+        await db.query.agencies.findFirst({
+          where: eq(
+            agencies.id,
+            cart.agencyId,
           ),
         });
 
@@ -294,6 +300,7 @@ export class CartService {
                 product.image;
 
               if (
+                key &&
                 key.startsWith(
                   "http",
                 )
@@ -314,14 +321,27 @@ export class CartService {
                   ...product,
 
                   image:
-                    await this.s3Service.getSignedImageUrl(
-                      key,
-                    ),
+                    key
+                      ? await this.s3Service.getSignedImageUrl(
+                          key,
+                        )
+                      : null,
                 },
               };
             },
           ),
         );
+
+      const validProducts =
+        productsData.filter(
+          Boolean,
+        );
+
+      if (validProducts.length === 0) {
+        await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+        await db.delete(carts).where(eq(carts.id, cart.id));
+        continue;
+      }
 
       result.push({
         cartId: cart.id,
@@ -330,10 +350,7 @@ export class CartService {
         agencyName:
           agency?.agencyName ??
           "Agency",
-        items:
-          productsData.filter(
-            Boolean,
-          ),
+        items: validProducts,
       });
     }
 
@@ -398,6 +415,31 @@ export class CartService {
       throw new NotFoundException(
         "Unauthorized.",
       );
+    }
+
+    if (quantity <= 0) {
+      await db
+        .delete(cartItems)
+        .where(
+          eq(
+            cartItems.id,
+            itemId,
+          ),
+        );
+
+      const remainingItems = await db.query.cartItems.findFirst({
+        where: eq(cartItems.cartId, cart.id),
+      });
+
+      if (!remainingItems) {
+        await db.delete(carts).where(eq(carts.id, cart.id));
+      }
+
+      return {
+        success: true,
+        message: "Item removed from cart.",
+        item: null,
+      };
     }
 
     const [updated] =
@@ -489,6 +531,14 @@ export class CartService {
           itemId,
         ),
       );
+
+    const remainingItems = await db.query.cartItems.findFirst({
+      where: eq(cartItems.cartId, cart.id),
+    });
+
+    if (!remainingItems) {
+      await db.delete(carts).where(eq(carts.id, cart.id));
+    }
 
     return {
       success: true,
@@ -605,6 +655,11 @@ export class CartService {
     // FIND CARTS
     // ==========================================
 
+    const requestedAgencyIds =
+      Array.isArray(dto.orders) && dto.orders.length > 0
+        ? new Set(dto.orders.map((o) => o.agencyId).filter(Boolean))
+        : null;
+
     const userCarts =
       await db.query.carts.findMany({
         where: eq(
@@ -613,8 +668,12 @@ export class CartService {
         ),
       });
 
+    const targetCarts = requestedAgencyIds
+      ? userCarts.filter((c) => requestedAgencyIds.has(c.agencyId))
+      : userCarts;
+
     if (
-      userCarts.length === 0
+      targetCarts.length === 0
     ) {
       throw new NotFoundException(
         "Cart is empty.",
@@ -630,8 +689,26 @@ export class CartService {
     // ==========================================
 
     for (
-      const cart of userCarts
+      const cart of targetCarts
     ) {
+      // ========================================
+      // GET CART ITEMS
+      // ========================================
+
+      const items =
+        await db.query.cartItems.findMany({
+          where: eq(
+            cartItems.cartId,
+            cart.id,
+          ),
+        });
+
+      if (items.length === 0) {
+        // Clean up orphaned empty cart and skip
+        await db.delete(carts).where(eq(carts.id, cart.id));
+        continue;
+      }
+
       // ========================================
       // FIND AGENCY
       // ========================================
@@ -645,9 +722,7 @@ export class CartService {
         });
 
       if (!agency) {
-        throw new NotFoundException(
-          "Agency not found.",
-        );
+        continue;
       }
 
       // ========================================
@@ -751,24 +826,6 @@ export class CartService {
         const orderDay = new Date();
         orderDay.setHours(0, 0, 0, 0);
         scheduledDate = orderDay;
-      }
-
-      // ========================================
-      // GET CART ITEMS
-      // ========================================
-
-      const items =
-        await db.query.cartItems.findMany({
-          where: eq(
-            cartItems.cartId,
-            cart.id,
-          ),
-        });
-
-      if (items.length === 0) {
-        throw new BadRequestException(
-          "Cart is empty for this agency.",
-        );
       }
 
       // ========================================
@@ -1017,6 +1074,10 @@ export class CartService {
       } catch (pushErr) {
         console.log("Error dispatching order push notification:", pushErr);
       }
+    }
+
+    if (createdOrders.length === 0) {
+      throw new BadRequestException("No items available in cart to place order.");
     }
 
     // ==========================================
