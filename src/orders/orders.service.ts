@@ -30,6 +30,36 @@ import { UpdateOrderDto } from "./dto/update-order.dto";
 import { calculateNextDeliveryDate } from "../delivery-slots/delivery-slots.utils";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 
+function formatUnitBreakdown(cases: number, loose: number, unit?: string | null): string {
+  const baseUnit = (unit && unit.trim()) || "Case";
+  const unitLower = baseUnit.toLowerCase();
+
+  let singular = baseUnit;
+  if (unitLower.endsWith("s") && !unitLower.endsWith("ss") && unitLower !== "glass") {
+    singular = baseUnit.slice(0, -1);
+  }
+
+  let plural = baseUnit;
+  if (unitLower.endsWith("s") || unitLower.endsWith("x") || unitLower.endsWith("ch") || unitLower.endsWith("sh")) {
+    plural = baseUnit.endsWith("es") ? baseUnit : `${baseUnit}es`;
+  } else if (!baseUnit.endsWith("s")) {
+    plural = `${baseUnit}s`;
+  }
+
+  const unitText = cases === 1 ? singular : plural;
+  const pieceText = loose === 1 ? "Piece" : "Pieces";
+
+  if (cases > 0 && loose > 0) {
+    return `${cases} ${unitText} + ${loose} ${pieceText}`;
+  } else if (cases > 0) {
+    return `${cases} ${unitText}`;
+  } else if (loose > 0) {
+    return `${loose} ${pieceText}`;
+  } else {
+    return `${cases} ${plural}`;
+  }
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -236,12 +266,16 @@ export class OrdersService {
             null,
 
           scheduledDate:
-            selectedDeliveryDate,
+            selectedDeliveryDate ?? (() => {
+              const d = new Date();
+              d.setHours(0, 0, 0, 0);
+              return d;
+            })(),
 
           status:
             selectedDeliveryDay
               ? "SCHEDULED"
-              : "DELIVERY_SCHEDULE_PENDING",
+              : "PENDING",
 
           remarks:
             dto.remarks,
@@ -426,16 +460,7 @@ export class OrdersService {
         totalGstAmount +=
           totalCaseGst;
 
-        let packBreakdown = "";
-        if (cases > 0 && loose > 0) {
-          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
-        } else if (cases > 0) {
-          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
-        } else if (loose > 0) {
-          packBreakdown = `${loose} Loose`;
-        } else {
-          packBreakdown = `${cases} Cases`;
-        }
+        const packBreakdown = formatUnitBreakdown(cases, loose, product.unit);
 
         productsData.push({
           id:
@@ -763,16 +788,7 @@ export class OrdersService {
         totalGstAmount +=
           totalCaseGst;
 
-        let packBreakdown = "";
-        if (cases > 0 && loose > 0) {
-          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
-        } else if (cases > 0) {
-          packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
-        } else if (loose > 0) {
-          packBreakdown = `${loose} Loose`;
-        } else {
-          packBreakdown = `${cases} Cases`;
-        }
+        const packBreakdown = formatUnitBreakdown(cases, loose, product.unit);
 
         productsData.push({
           id:
@@ -1153,16 +1169,7 @@ if (!effectiveScheduledDate && deliveryDay) {
       totalGstAmount +=
         totalCaseGst;
 
-      let packBreakdown = "";
-      if (cases > 0 && loose > 0) {
-        packBreakdown = `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`;
-      } else if (cases > 0) {
-        packBreakdown = `${cases} Case${cases > 1 ? "s" : ""}`;
-      } else if (loose > 0) {
-        packBreakdown = `${loose} Loose`;
-      } else {
-        packBreakdown = `${cases} Cases`;
-      }
+      const packBreakdown = formatUnitBreakdown(cases, loose, product.unit);
 
       productsData.push({
         id:
@@ -1474,6 +1481,42 @@ if (!effectiveScheduledDate && deliveryDay) {
     ) {
       updateData.acceptedAt =
         new Date();
+    }
+
+    // Auto-connect agency & shop when order is accepted, dispatched or delivered
+    if (
+      dto.status === "ACCEPTED" ||
+      dto.status === "OUT_FOR_DELIVERY" ||
+      dto.status === "DELIVERED"
+    ) {
+      try {
+        const existingConn = await db.query.agencyShopConnections.findFirst({
+          where: and(
+            eq(agencyShopConnections.agencyId, agency.id),
+            eq(agencyShopConnections.shopId, order.shopId),
+          ),
+        });
+
+        if (!existingConn) {
+          await db.insert(agencyShopConnections).values({
+            agencyId: agency.id,
+            shopId: order.shopId,
+          });
+
+          await db
+            .update(agencyShopRequests)
+            .set({ status: "ACCEPTED" })
+            .where(
+              and(
+                eq(agencyShopRequests.agencyId, agency.id),
+                eq(agencyShopRequests.shopId, order.shopId),
+                eq(agencyShopRequests.status, "PENDING"),
+              ),
+            );
+        }
+      } catch (connErr) {
+        console.log("Auto-connect on order update note:", connErr);
+      }
     }
 
     // ==========================================

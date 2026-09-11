@@ -745,6 +745,12 @@ export class CartService {
           deliveryDay,
           new Date(),
         );
+      } else {
+        // If agency has not created a recurring delivery slot for this shop,
+        // default scheduledDate to today's order date so it maps to today's weekday slot (e.g. Saturday)
+        const orderDay = new Date();
+        orderDay.setHours(0, 0, 0, 0);
+        scheduledDate = orderDay;
       }
 
       // ========================================
@@ -759,15 +765,14 @@ export class CartService {
           ),
         });
 
-      if (
-        items.length === 0
-      ) {
-        continue;
+      if (items.length === 0) {
+        throw new BadRequestException(
+          "Cart is empty for this agency.",
+        );
       }
 
       // ========================================
-      // ========================================
-      // VALIDATE STOCK & CALCULATE TOTAL
+      // CALCULATE TOTAL AMOUNT
       // ========================================
 
       let totalAmount = 0;
@@ -785,18 +790,23 @@ export class CartService {
 
         if (!product) {
           throw new NotFoundException(
-            `Product ${item.productId} not found.`,
+            "One or more products not found.",
           );
         }
 
-        const currentStockCases =
-          Math.max(0, parseInt(product.stock, 10) || 0);
-        const unitsPerCase =
-          parseInt(product.quantityPerUnit, 10) || 1;
-        const availableUnits =
-          currentStockCases * unitsPerCase;
+        const unitsPerCase = product
+          ? parseInt(product.quantityPerUnit, 10) || 1
+          : 1;
         const totalUnits =
           Number(item.quantity) || 0;
+
+        // Check stock availability
+        const currentStockCases = Math.max(
+          0,
+          parseInt(product.stock, 10) || 0,
+        );
+        const availableUnits =
+          currentStockCases * unitsPerCase;
 
         if (totalUnits > availableUnits) {
           throw new BadRequestException(
@@ -835,10 +845,11 @@ export class CartService {
       // DETERMINE ORDER STATUS
       // ========================================
 
+      // Recurring slot -> SCHEDULED. No recurring slot -> PENDING (slot optional, agency can accept immediately).
       const orderStatus =
         deliveryDay
           ? "SCHEDULED"
-          : "DELIVERY_SCHEDULE_PENDING";
+          : "PENDING";
 
       // ========================================
       // CREATE ORDER
@@ -977,9 +988,20 @@ export class CartService {
         if (agency.userId) {
           const shopName = shop.shopName || "Grocery Store";
           const orderShort = order.id.slice(0, 8);
+          const orderDayDate = scheduledDate || new Date();
+          const dayName = orderDayDate.toLocaleDateString("en-IN", { weekday: "long" });
+
+          const notifTitle = deliveryDay
+            ? "🛍️ New Order Received!"
+            : `🛍️ New Order (${dayName})!`;
+
+          const notifBody = deliveryDay
+            ? `${shopName} placed new order #${orderShort} for ₹${totalAmount.toLocaleString("en-IN")} scheduled for ${dayName}.`
+            : `New grocery ${shopName} ordered on ${dayName} for ₹${totalAmount.toLocaleString("en-IN")}. Accept order or assign delivery slot.`;
+
           await this.pushNotificationsService.sendToUser(agency.userId, {
-            title: "🛍️ New Order Received!",
-            body: `${shopName} placed new order #${orderShort} for ₹${totalAmount.toLocaleString("en-IN")}.`,
+            title: notifTitle,
+            body: notifBody,
             screenToOpen: "/(agency)/orders",
             channelId: "orders",
             data: {
@@ -987,6 +1009,8 @@ export class CartService {
               orderNumber: orderShort,
               shopName,
               amount: totalAmount,
+              dayName,
+              isSlotOptional: !deliveryDay,
             },
           });
         }

@@ -54,7 +54,7 @@ export class AuthController {
   @Post("push-token")
   async savePushToken(
     @Req() req: any,
-    @Body() body: { pushToken: string; userId?: string },
+    @Body() body: { pushToken?: string | null; userId?: string },
   ) {
     let targetUserId = body.userId;
     if (!targetUserId && req.headers?.authorization) {
@@ -70,6 +70,6 @@ export class AuthController {
     if (!targetUserId) {
       return { success: false, message: "No target user specified" };
     }
-    return this.pushNotificationsService.savePushToken(targetUserId, body.pushToken);
+    return this.pushNotificationsService.savePushToken(targetUserId, body.pushToken || null);
   }
 }

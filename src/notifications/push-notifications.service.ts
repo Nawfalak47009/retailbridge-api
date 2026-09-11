@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../db/schema";
 
@@ -17,14 +17,32 @@ export class PushNotificationsService {
   private readonly expoPushUrl = "https://exp.host/--/api/v2/push/send";
 
   /**
-   * Save or update Expo Push Token for a user
+   * Save or update Expo Push Token for a user.
+   * Ensures the token is cleared from any prior user on this device so
+   * notifications are strictly bound to the authenticated user.
    */
-  async savePushToken(userId: string, pushToken: string): Promise<{ success: boolean; message: string }> {
-    if (!userId || !pushToken) {
-      return { success: false, message: "Missing userId or pushToken" };
+  async savePushToken(userId: string, pushToken?: string | null): Promise<{ success: boolean; message: string }> {
+    if (!userId) {
+      return { success: false, message: "Missing userId" };
     }
 
     try {
+      if (!pushToken) {
+        await db
+          .update(users)
+          .set({ pushToken: null })
+          .where(eq(users.id, userId));
+
+        this.logger.log(`Cleared pushToken for user ${userId}`);
+        return { success: true, message: "Push token cleared" };
+      }
+
+      // Unbind this push token from any other accounts on this phone
+      await db
+        .update(users)
+        .set({ pushToken: null })
+        .where(and(eq(users.pushToken, pushToken), ne(users.id, userId)));
+
       await db
         .update(users)
         .set({ pushToken })
@@ -39,7 +57,7 @@ export class PushNotificationsService {
   }
 
   /**
-   * Send push notification to a single user by userId
+   * Send push notification to a single user by userId, stamped with authentication identifiers
    */
   async sendToUser(userId: string, payload: PushNotificationPayload): Promise<boolean> {
     if (!userId) return false;
@@ -54,7 +72,17 @@ export class PushNotificationsService {
         return false;
       }
 
-      return await this.sendPushMessage(user.pushToken, payload);
+      const enrichedPayload: PushNotificationPayload = {
+        ...payload,
+        data: {
+          recipientId: userId,
+          recipientRole: user.role,
+          screenToOpen: payload.screenToOpen || "",
+          ...(payload.data || {}),
+        },
+      };
+
+      return await this.sendPushMessage(user.pushToken, enrichedPayload);
     } catch (err) {
       this.logger.error(`Error sending push to user ${userId}:`, err);
       return false;
@@ -72,13 +100,20 @@ export class PushNotificationsService {
         where: inArray(users.id, userIds),
       });
 
-      const tokens = userRecords
-        .map((u) => u.pushToken)
-        .filter((t): t is string => Boolean(t && (t.startsWith("ExponentPushToken") || t.startsWith("ExpoPushToken"))));
-
-      if (tokens.length === 0) return;
-
-      await this.sendPushBatch(tokens, payload);
+      for (const u of userRecords) {
+        if (u.pushToken && (u.pushToken.startsWith("ExponentPushToken") || u.pushToken.startsWith("ExpoPushToken"))) {
+          const enrichedPayload: PushNotificationPayload = {
+            ...payload,
+            data: {
+              recipientId: u.id,
+              recipientRole: u.role,
+              screenToOpen: payload.screenToOpen || "",
+              ...(payload.data || {}),
+            },
+          };
+          await this.sendPushMessage(u.pushToken, enrichedPayload);
+        }
+      }
     } catch (err) {
       this.logger.error(`Error sending push to users:`, err);
     }

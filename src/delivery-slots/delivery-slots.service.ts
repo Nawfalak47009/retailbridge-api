@@ -15,6 +15,7 @@ import { db } from "../db";
 import {
   deliverySlots,
   agencyShopConnections,
+  agencyShopRequests,
   agencies,
   shops,
   orders,
@@ -74,7 +75,7 @@ export class DeliverySlotsService {
     // Verify shop is connected
     // ------------------------------------------
 
-    const connection =
+    let connection =
       await db.query.agencyShopConnections.findFirst({
         where: and(
           eq(
@@ -89,9 +90,42 @@ export class DeliverySlotsService {
       });
 
     if (!connection) {
-      throw new ForbiddenException(
-        "This shop is not connected to your agency.",
-      );
+      // Check if there is an incoming request or order from this shop
+      const pendingReq = await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(agencyShopRequests.agencyId, dto.agencyId),
+          eq(agencyShopRequests.shopId, dto.shopId),
+        ),
+      });
+
+      const hasOrder = await db.query.orders.findFirst({
+        where: and(
+          eq(orders.agencyId, dto.agencyId),
+          eq(orders.shopId, dto.shopId),
+        ),
+      });
+
+      if (pendingReq || hasOrder) {
+        try {
+          await db.insert(agencyShopConnections).values({
+            agencyId: dto.agencyId,
+            shopId: dto.shopId,
+          });
+
+          if (pendingReq && pendingReq.status === "PENDING") {
+            await db
+              .update(agencyShopRequests)
+              .set({ status: "ACCEPTED" })
+              .where(eq(agencyShopRequests.id, pendingReq.id));
+          }
+        } catch (connErr) {
+          console.log("Auto connect in delivery slot note:", connErr);
+        }
+      } else {
+        throw new ForbiddenException(
+          "This shop is not connected to your agency.",
+        );
+      }
     }
 
     // ------------------------------------------
