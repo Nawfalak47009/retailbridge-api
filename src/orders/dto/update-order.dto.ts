@@ -5,6 +5,7 @@ import {
 } from "class-validator";
 
 export class UpdateOrderDto {
+  @IsOptional()
   @IsString()
   @IsIn([
     "PENDING",
@@ -16,7 +17,7 @@ export class UpdateOrderDto {
     "DELIVERED",
     "CANCELLED",
   ])
-  status!:
+  status?:
     | "PENDING"
     | "DELIVERY_SCHEDULE_PENDING"
     | "ACCEPTED"

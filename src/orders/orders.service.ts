@@ -1724,11 +1724,13 @@ if (!effectiveScheduledDate && deliveryDay) {
         where: eq(shops.id, order.shopId),
       });
 
-      if (shop?.userId) {
+      if (shop?.userId && (dto.status || dto.slotId)) {
         const orderShort = order.id.slice(0, 8);
         const agencyName = agency.agencyName || "Agency";
         let title = "📋 Order Status Updated";
-        let body = `Your order #${orderShort} is now ${dto.status.replace(/_/g, " ")}.`;
+        let body = dto.status
+          ? `Your order #${orderShort} is now ${dto.status.replace(/_/g, " ")}.`
+          : `Your order #${orderShort} has been scheduled for delivery.`;
 
         switch (dto.status) {
           case "ACCEPTED":
@@ -1750,6 +1752,12 @@ if (!effectiveScheduledDate && deliveryDay) {
           case "CANCELLED":
             title = "❌ Order Cancelled";
             body = `Order #${orderShort} was cancelled by ${agencyName}.`;
+            break;
+          default:
+            if (dto.slotId) {
+              title = "📅 Delivery Scheduled!";
+              body = `Your order #${orderShort} has been scheduled for delivery.`;
+            }
             break;
         }
 
