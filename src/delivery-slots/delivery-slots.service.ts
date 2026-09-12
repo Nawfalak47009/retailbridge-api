@@ -128,6 +128,26 @@ export class DeliverySlotsService {
       }
     }
 
+    // Ensure any pending connection request is marked ACCEPTED when a day slot is created
+    try {
+      const pendingReq = await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(agencyShopRequests.agencyId, dto.agencyId),
+          eq(agencyShopRequests.shopId, dto.shopId),
+          eq(agencyShopRequests.status, "PENDING"),
+        ),
+      });
+
+      if (pendingReq) {
+        await db
+          .update(agencyShopRequests)
+          .set({ status: "ACCEPTED" })
+          .where(eq(agencyShopRequests.id, pendingReq.id));
+      }
+    } catch (e) {
+      console.log("Auto accept request on slot create note:", e);
+    }
+
     // ------------------------------------------
     // Validate delivery date
     // ------------------------------------------
@@ -408,6 +428,25 @@ export class DeliverySlotsService {
       });
 
     if (!connection) {
+      // Check if there is an incoming request or order from this shop
+      const pendingReq = await db.query.agencyShopRequests.findFirst({
+        where: and(
+          eq(agencyShopRequests.agencyId, agencyId),
+          eq(agencyShopRequests.shopId, shopId),
+        ),
+      });
+
+      const hasOrder = await db.query.orders.findFirst({
+        where: and(
+          eq(orders.agencyId, agencyId),
+          eq(orders.shopId, shopId),
+        ),
+      });
+
+      if (pendingReq || hasOrder) {
+        return [];
+      }
+
       throw new ForbiddenException(
         "This shop is not connected to your agency.",
       );

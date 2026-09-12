@@ -563,6 +563,23 @@ export class OrdersService {
         }
       }
 
+      const connection = await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(agencyShopConnections.agencyId, order.agencyId),
+          eq(agencyShopConnections.shopId, order.shopId),
+        ),
+      });
+
+      const pendingRequest = !connection
+        ? await db.query.agencyShopRequests.findFirst({
+            where: and(
+              eq(agencyShopRequests.agencyId, order.agencyId),
+              eq(agencyShopRequests.shopId, order.shopId),
+              eq(agencyShopRequests.status, "PENDING"),
+            ),
+          })
+        : null;
+
       response.push({
         id:
           order.id,
@@ -581,6 +598,10 @@ export class OrdersService {
 
         status:
           order.status,
+
+        isConnected: Boolean(connection),
+        hasPendingRequest: Boolean(pendingRequest),
+        connectionRequestId: pendingRequest?.id || null,
 
         createdAt:
           order.createdAt,
@@ -1272,6 +1293,23 @@ if (!effectiveScheduledDate && deliveryDay) {
   }
 }
 
+    const connection = await db.query.agencyShopConnections.findFirst({
+      where: and(
+        eq(agencyShopConnections.agencyId, order.agencyId),
+        eq(agencyShopConnections.shopId, order.shopId),
+      ),
+    });
+
+    const pendingRequest = !connection
+      ? await db.query.agencyShopRequests.findFirst({
+          where: and(
+            eq(agencyShopRequests.agencyId, order.agencyId),
+            eq(agencyShopRequests.shopId, order.shopId),
+            eq(agencyShopRequests.status, "PENDING"),
+          ),
+        })
+      : null;
+
     return {
       id:
         order.id,
@@ -1290,6 +1328,10 @@ if (!effectiveScheduledDate && deliveryDay) {
 
       status:
         order.status,
+
+      isConnected: Boolean(connection),
+      hasPendingRequest: Boolean(pendingRequest),
+      connectionRequestId: pendingRequest?.id || null,
 
       paymentStatus:
         order.paymentStatus,

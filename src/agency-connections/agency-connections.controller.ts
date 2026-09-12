@@ -67,7 +67,24 @@ export class AgencyConnectionsController {
   }
 
   // ==========================================
-  // ACCEPT
+  // ACCEPT SHOP CONNECTION
+  // ==========================================
+
+  @Patch("agency/:agencyId/shop/:shopId/accept")
+  acceptShopConnection(
+    @Param("agencyId") agencyId: string,
+    @Param("shopId") shopId: string,
+    @Req() req: any,
+  ) {
+    return this.agencyConnectionsService.acceptShopConnection(
+      agencyId,
+      shopId,
+      req.user,
+    );
+  }
+
+  // ==========================================
+  // ACCEPT BY REQUEST ID
   // ==========================================
 
   @Patch(":id/accept")

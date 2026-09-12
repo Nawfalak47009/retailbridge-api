@@ -583,6 +583,94 @@ export class AgencyConnectionsService {
   }
 
   // ==========================================
+  // ACCEPT SHOP CONNECTION (BY AGENCY & SHOP ID)
+  // ==========================================
+
+  async acceptShopConnection(
+    agencyId: string,
+    shopId: string,
+    user: any,
+  ) {
+    if (user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can accept shop connections.",
+      );
+    }
+
+    const agency = await db.query.agencies.findFirst({
+      where: eq(agencies.id, agencyId),
+    });
+
+    if (!agency || agency.userId !== user.id) {
+      throw new ForbiddenException(
+        "You can only accept connections for your own agency.",
+      );
+    }
+
+    // 1. Ensure connection exists in agencyShopConnections
+    const existingConnection =
+      await db.query.agencyShopConnections.findFirst({
+        where: and(
+          eq(agencyShopConnections.agencyId, agencyId),
+          eq(agencyShopConnections.shopId, shopId),
+        ),
+      });
+
+    if (!existingConnection) {
+      await db.insert(agencyShopConnections).values({
+        agencyId,
+        shopId,
+      });
+    }
+
+    // 2. Find any pending request between this agency and shop and mark ACCEPTED
+    const pendingReq = await db.query.agencyShopRequests.findFirst({
+      where: and(
+        eq(agencyShopRequests.agencyId, agencyId),
+        eq(agencyShopRequests.shopId, shopId),
+        eq(agencyShopRequests.status, "PENDING"),
+      ),
+    });
+
+    if (pendingReq) {
+      await db
+        .update(agencyShopRequests)
+        .set({
+          status: "ACCEPTED",
+        })
+        .where(eq(agencyShopRequests.id, pendingReq.id));
+
+      // Dispatch push notification to the shop
+      try {
+        const shop = await db.query.shops.findFirst({
+          where: eq(shops.id, shopId),
+        });
+        if (shop?.userId) {
+          const agencyName = agency.agencyName || "Agency";
+          await this.pushNotificationsService.sendToUser(shop.userId, {
+            title: "🎉 Connection Request Accepted!",
+            body: `${agencyName} accepted your connection request. You are now a connected regular customer!`,
+            screenToOpen: "/(grocery)/browse-agencies",
+            channelId: "connections",
+            data: {
+              requestId: pendingReq.id,
+              agencyId,
+              agencyName,
+            },
+          });
+        }
+      } catch (pushErr) {
+        console.log("Error dispatching accept shop connection push:", pushErr);
+      }
+    }
+
+    return {
+      success: true,
+      message: "Connection request accepted successfully.",
+    };
+  }
+
+  // ==========================================
   // REJECT REQUEST
   // ==========================================
 
