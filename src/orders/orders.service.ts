@@ -530,17 +530,6 @@ export class OrdersService {
           });
       }
 
-      if (!deliveryDay) {
-        deliveryDay = await db.query.deliverySlots.findFirst({
-          where: and(
-            eq(deliverySlots.agencyId, order.agencyId),
-            eq(deliverySlots.shopId, order.shopId),
-            eq(deliverySlots.isActive, "true"),
-          ),
-          orderBy: (s, { desc }) => [desc(s.createdAt)],
-        });
-      }
-
       let effectiveScheduledDate = order.scheduledDate;
       if (!effectiveScheduledDate && deliveryDay) {
         effectiveScheduledDate = calculateNextDeliveryDate(
@@ -877,17 +866,6 @@ if (order.slotId) {
         ),
       ),
     });
-}
-
-if (!deliveryDay) {
-  deliveryDay = await db.query.deliverySlots.findFirst({
-    where: and(
-      eq(deliverySlots.agencyId, order.agencyId),
-      eq(deliverySlots.shopId, order.shopId),
-      eq(deliverySlots.isActive, "true"),
-    ),
-    orderBy: (s, { desc }) => [desc(s.createdAt)],
-  });
 }
 
 let effectiveScheduledDate = order.scheduledDate;
@@ -1260,17 +1238,6 @@ if (order.slotId) {
     });
 }
 
-if (!deliveryDay) {
-  deliveryDay = await db.query.deliverySlots.findFirst({
-    where: and(
-      eq(deliverySlots.agencyId, order.agencyId),
-      eq(deliverySlots.shopId, order.shopId),
-      eq(deliverySlots.isActive, "true"),
-    ),
-    orderBy: (s, { desc }) => [desc(s.createdAt)],
-  });
-}
-
 let effectiveScheduledDate = order.scheduledDate;
 if (!effectiveScheduledDate && deliveryDay) {
   effectiveScheduledDate = calculateNextDeliveryDate(
@@ -1525,42 +1492,6 @@ if (!effectiveScheduledDate && deliveryDay) {
         new Date();
     }
 
-    // Auto-connect agency & shop when order is accepted, dispatched or delivered
-    if (
-      dto.status === "ACCEPTED" ||
-      dto.status === "OUT_FOR_DELIVERY" ||
-      dto.status === "DELIVERED"
-    ) {
-      try {
-        const existingConn = await db.query.agencyShopConnections.findFirst({
-          where: and(
-            eq(agencyShopConnections.agencyId, agency.id),
-            eq(agencyShopConnections.shopId, order.shopId),
-          ),
-        });
-
-        if (!existingConn) {
-          await db.insert(agencyShopConnections).values({
-            agencyId: agency.id,
-            shopId: order.shopId,
-          });
-
-          await db
-            .update(agencyShopRequests)
-            .set({ status: "ACCEPTED" })
-            .where(
-              and(
-                eq(agencyShopRequests.agencyId, agency.id),
-                eq(agencyShopRequests.shopId, order.shopId),
-                eq(agencyShopRequests.status, "PENDING"),
-              ),
-            );
-        }
-      } catch (connErr) {
-        console.log("Auto-connect on order update note:", connErr);
-      }
-    }
-
     // ==========================================
     // ASSIGN DELIVERY DAY
     // ==========================================
@@ -1619,6 +1550,8 @@ if (!effectiveScheduledDate && deliveryDay) {
 
       const scheduledDate =
         new Date(
+          dto.scheduledDate ||
+          dto.deliveryDate ||
           deliveryDay.deliveryDate,
         );
 

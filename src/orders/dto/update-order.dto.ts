@@ -46,4 +46,8 @@ export class UpdateOrderDto {
   @IsOptional()
   @IsString()
   scheduledDate?: string;
+
+  @IsOptional()
+  @IsString()
+  deliveryDate?: string;
 }
