@@ -821,11 +821,7 @@ export class CartService {
           new Date(),
         );
       } else {
-        // If agency has not created a recurring delivery slot for this shop,
-        // default scheduledDate to today's order date so it maps to today's weekday slot (e.g. Saturday)
-        const orderDay = new Date();
-        orderDay.setHours(0, 0, 0, 0);
-        scheduledDate = orderDay;
+        scheduledDate = null;
       }
 
       // ========================================

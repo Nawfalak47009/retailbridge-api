@@ -246,7 +246,6 @@ export class DeliverySlotsService {
         .set({
           scheduledDate: deliveryDate,
           slotId: deliveryDay.id,
-          status: "SCHEDULED",
         })
         .where(
           and(

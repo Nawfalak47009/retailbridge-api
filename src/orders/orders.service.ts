@@ -266,11 +266,7 @@ export class OrdersService {
             null,
 
           scheduledDate:
-            selectedDeliveryDate ?? (() => {
-              const d = new Date();
-              d.setHours(0, 0, 0, 0);
-              return d;
-            })(),
+            selectedDeliveryDate ?? null,
 
           status:
             selectedDeliveryDay
@@ -544,11 +540,13 @@ export class OrdersService {
       ) {
         const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
         const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-        if (schedTime < createdTime && deliveryDay) {
-          effectiveScheduledDate = calculateNextDeliveryDate(
-            deliveryDay,
-            new Date(order.createdAt),
-          );
+        if (schedTime < createdTime) {
+          effectiveScheduledDate = deliveryDay
+            ? calculateNextDeliveryDate(
+                deliveryDay,
+                new Date(order.createdAt),
+              )
+            : null;
         }
       }
 
@@ -882,11 +880,13 @@ if (!effectiveScheduledDate && deliveryDay) {
 ) {
   const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
   const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-  if (schedTime < createdTime && deliveryDay) {
-    effectiveScheduledDate = calculateNextDeliveryDate(
-      deliveryDay,
-      new Date(order.createdAt),
-    );
+  if (schedTime < createdTime) {
+    effectiveScheduledDate = deliveryDay
+      ? calculateNextDeliveryDate(
+          deliveryDay,
+          new Date(order.createdAt),
+        )
+      : null;
   }
 }
 
@@ -1252,11 +1252,13 @@ if (!effectiveScheduledDate && deliveryDay) {
 ) {
   const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
   const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-  if (schedTime < createdTime && deliveryDay) {
-    effectiveScheduledDate = calculateNextDeliveryDate(
-      deliveryDay,
-      new Date(order.createdAt),
-    );
+  if (schedTime < createdTime) {
+    effectiveScheduledDate = deliveryDay
+      ? calculateNextDeliveryDate(
+          deliveryDay,
+          new Date(order.createdAt),
+        )
+      : null;
   }
 }
 
@@ -1467,8 +1469,7 @@ if (!effectiveScheduledDate && deliveryDay) {
     const updateData: Partial<
       typeof orders.$inferInsert
     > = {
-      status:
-        dto.status,
+      ...(dto.status ? { status: dto.status } : {}),
 
       deliveryPerson:
         dto.deliveryPerson,
@@ -1498,7 +1499,8 @@ if (!effectiveScheduledDate && deliveryDay) {
 
     if (
       dto.status ===
-      "SCHEDULED"
+      "SCHEDULED" ||
+      dto.slotId
     ) {
       // ----------------------------------------
       // Temporary compatibility:
@@ -1777,7 +1779,7 @@ if (!effectiveScheduledDate && deliveryDay) {
 
       message:
         dto.status ===
-        "SCHEDULED"
+        "SCHEDULED" || dto.slotId
           ? "Delivery day assigned successfully."
           : "Order updated successfully.",
 
