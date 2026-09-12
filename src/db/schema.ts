@@ -561,7 +561,7 @@ export const userSessions = pgTable(
       .defaultRandom()
       .primaryKey(),
 
-    userId: varchar({
+    userId: varchar("user_id", {
       length: 255,
     }).notNull(),
 
@@ -569,15 +569,15 @@ export const userSessions = pgTable(
       length: 1000,
     }).notNull(),
 
-    deviceInfo: varchar({
+    deviceInfo: varchar("device_info", {
       length: 255,
     }),
 
-    createdAt: timestamp()
+    createdAt: timestamp("created_at")
       .defaultNow()
       .notNull(),
 
-    lastActiveAt: timestamp()
+    lastActiveAt: timestamp("last_active_at")
       .defaultNow()
       .notNull(),
   },

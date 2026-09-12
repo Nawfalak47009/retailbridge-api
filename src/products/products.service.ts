@@ -304,9 +304,13 @@ export class ProductsService {
   async findOne(
     id: string,
   ) {
+    const UUID_REGEX =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     if (
       !id ||
-      id === "undefined"
+      id === "undefined" ||
+      !UUID_REGEX.test(id)
     ) {
       throw new NotFoundException(
         "Invalid product id.",

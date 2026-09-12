@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -86,7 +87,7 @@ findByAgency(
 }
   @Get(":id")
   findOne(
-    @Param("id")
+    @Param("id", new ParseUUIDPipe({ errorHttpStatusCode: 400 }))
     id: string,
   ) {
     return this.productsService.findOne(id);
@@ -125,7 +126,7 @@ findByAgency(
   @Roles("AGENCY")
   update(
     @CurrentUser() user: JwtUser,
-    @Param("id")
+    @Param("id", new ParseUUIDPipe({ errorHttpStatusCode: 400 }))
     id: string,
     @Body()
     dto: UpdateProductDto,
@@ -149,7 +150,7 @@ findByAgency(
   @Roles("AGENCY")
   remove(
     @CurrentUser() user: JwtUser,
-    @Param("id")
+    @Param("id", new ParseUUIDPipe({ errorHttpStatusCode: 400 }))
     id: string,
   ) {
     return this.productsService.remove(
