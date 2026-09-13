@@ -3,7 +3,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { eq, and, inArray, ne } from "drizzle-orm";
+import { eq, and, inArray, ne, count } from "drizzle-orm";
 
 import { db } from "../db";
 
@@ -305,45 +305,25 @@ export class ShopsService {
       );
     }
 
-    // ===================================
-    // TOTAL AGENCIES
-    // ===================================
-
-    const allAgencies =
-      await db.query.agencies.findMany();
-
-    // ===================================
-    // CONNECTED AGENCIES
-    // ===================================
-
-    const connections =
-      await db.query.agencyShopConnections.findMany({
+    // Run initial queries in parallel
+    const [agencyCountResult, connections, shopOrders] = await Promise.all([
+      db.select({ count: count() }).from(agencies),
+      db.query.agencyShopConnections.findMany({
         where: eq(
           agencyShopConnections.shopId,
           shop.id,
         ),
-      });
-
-    // ===================================
-    // ORDERS
-    // ===================================
-
-    const shopOrders =
-      await db.query.orders.findMany({
+      }),
+      db.query.orders.findMany({
         where: eq(
           orders.shopId,
           shop.id,
         ),
+        orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+      }),
+    ]);
 
-        orderBy: (
-          orders,
-          { desc },
-        ) => [
-          desc(
-            orders.createdAt,
-          ),
-        ],
-      });
+    const totalAgencies = Number(agencyCountResult[0]?.count || 0);
 
     const deliveredOrdersCount =
       shopOrders.filter(
@@ -352,20 +332,28 @@ export class ShopsService {
           "DELIVERED",
       ).length;
 
-    // Active slots for connected agencies
+    // Active slots and agencies for connected agencies in parallel
     const connectedAgencyIds = connections.map((c) => c.agencyId);
     let activeSlots: any[] = [];
+    let connectedAgencies: any[] = [];
     if (connectedAgencyIds.length > 0) {
-      activeSlots = await db
-        .select()
-        .from(deliverySlots)
-        .where(
-          and(
-            inArray(deliverySlots.agencyId, connectedAgencyIds),
-            eq(deliverySlots.shopId, shop.id),
-            eq(deliverySlots.isActive, "true"),
+      const [slotsResult, agenciesResult] = await Promise.all([
+        db
+          .select()
+          .from(deliverySlots)
+          .where(
+            and(
+              inArray(deliverySlots.agencyId, connectedAgencyIds),
+              eq(deliverySlots.shopId, shop.id),
+              eq(deliverySlots.isActive, "true"),
+            ),
           ),
-        );
+        db.query.agencies.findMany({
+          where: inArray(agencies.id, connectedAgencyIds),
+        }),
+      ]);
+      activeSlots = slotsResult;
+      connectedAgencies = agenciesResult;
     }
 
     const now = Date.now();
@@ -417,7 +405,7 @@ export class ShopsService {
       });
 
       for (const slot of upcomingSlots) {
-        const agency = allAgencies.find((a) => a.id === slot.agencyId);
+        const agency = connectedAgencies.find((a) => a.id === slot.agencyId);
         const slotDate = new Date(slot.deliveryDate);
         const slotDateEnd = new Date(slot.deliveryDate);
         slotDateEnd.setHours(23, 59, 59, 999);
@@ -500,8 +488,7 @@ export class ShopsService {
 
         // All agencies registered
         // in the system
-        totalAgencies:
-          allAgencies.length,
+        totalAgencies,
 
         // Agencies connected
         // to this shop

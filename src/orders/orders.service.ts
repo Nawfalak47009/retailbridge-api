@@ -7,6 +7,7 @@ import {
 import {
   eq,
   and,
+  inArray,
 } from "drizzle-orm";
 
 import { db } from "../db";
@@ -328,6 +329,26 @@ export class OrdersService {
     });
   }
 
+  private async getSignedUrlsMap(rawKeys: (string | null | undefined)[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const uniqueKeys = [...new Set(rawKeys.filter(Boolean) as string[])];
+    await Promise.all(
+      uniqueKeys.map(async (rawKey) => {
+        let key = rawKey;
+        if (key.startsWith("http")) {
+          key = key.split("?")[0].split("/").pop()!;
+        }
+        try {
+          const url = await this.s3Service.getSignedImageUrl(key);
+          map.set(rawKey, url);
+        } catch {
+          map.set(rawKey, rawKey);
+        }
+      }),
+    );
+    return map;
+  }
+
   // ===========================
   // AGENCY - MY ORDERS
   // ===========================
@@ -365,71 +386,91 @@ export class OrdersService {
         ],
       });
 
+    if (agencyOrders.length === 0) {
+      return [];
+    }
+
+    const orderIds = agencyOrders.map((o) => o.id);
+    const shopIds = [...new Set(agencyOrders.map((o) => o.shopId).filter(Boolean))];
+    const slotIds = [...new Set(agencyOrders.map((o) => o.slotId).filter(Boolean) as string[])];
+
+    // Stage 1: Batch fetch all related data in parallel
+    const [allShops, allItems, allSlots, allConnections, allPendingRequests] = await Promise.all([
+      shopIds.length > 0 ? db.query.shops.findMany({ where: inArray(shops.id, shopIds) }) : [],
+      db.query.orderItems.findMany({ where: inArray(orderItems.orderId, orderIds) }),
+      slotIds.length > 0 ? db.query.deliverySlots.findMany({ where: inArray(deliverySlots.id, slotIds) }) : [],
+      shopIds.length > 0
+        ? db.query.agencyShopConnections.findMany({
+            where: and(
+              eq(agencyShopConnections.agencyId, agency.id),
+              inArray(agencyShopConnections.shopId, shopIds),
+            ),
+          })
+        : [],
+      shopIds.length > 0
+        ? db.query.agencyShopRequests.findMany({
+            where: and(
+              eq(agencyShopRequests.agencyId, agency.id),
+              inArray(agencyShopRequests.shopId, shopIds),
+              eq(agencyShopRequests.status, "PENDING"),
+            ),
+          })
+        : [],
+    ]);
+
+    // Stage 2: Batch fetch products for all items
+    const productIds = [...new Set(allItems.map((i) => i.productId).filter(Boolean))];
+    const allProducts =
+      productIds.length > 0
+        ? await db.query.products.findMany({ where: inArray(products.id, productIds) })
+        : [];
+
+    // Stage 3: Batch fetch S3 signed URLs
+    const imageMap = await this.getSignedUrlsMap(allProducts.map((p) => p.image));
+
+    // Lookup Maps
+    const shopsMap = new Map<string, any>();
+    for (const s of allShops) shopsMap.set(s.id, s);
+
+    const slotsMap = new Map<string, any>();
+    for (const sl of allSlots) slotsMap.set(sl.id, sl);
+
+    const productsMap = new Map<string, any>();
+    for (const p of allProducts) productsMap.set(p.id, p);
+
+    const connectionsMap = new Map<string, any>();
+    for (const c of allConnections) connectionsMap.set(c.shopId, c);
+
+    const requestsMap = new Map<string, any>();
+    for (const r of allPendingRequests) requestsMap.set(r.shopId, r);
+
+    const itemsByOrderId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      const list = itemsByOrderId.get(item.orderId) || [];
+      list.push(item);
+      itemsByOrderId.set(item.orderId, list);
+    }
+
+    // Assemble response in memory (O(1) lookups, 0 extra SQL queries)
     const response: any[] = [];
-
-    for (
-      const order of agencyOrders
-    ) {
-      const shop =
-        await db.query.shops.findFirst({
-          where: eq(
-            shops.id,
-            order.shopId,
-          ),
-        });
-
-      const items =
-        await db.query.orderItems.findMany({
-          where: eq(
-            orderItems.orderId,
-            order.id,
-          ),
-        });
-
+    for (const order of agencyOrders) {
+      const shop = shopsMap.get(order.shopId);
+      const items = itemsByOrderId.get(order.id) || [];
       const productsData: any[] = [];
-
       let totalAmount = 0;
       let totalQuantity = 0;
       let totalGstAmount = 0;
 
-      for (
-        const item of items
-      ) {
-        const product =
-          await db.query.products.findFirst({
-            where: eq(
-              products.id,
-              item.productId,
-            ),
-          });
+      for (const item of items) {
+        const product = productsMap.get(item.productId);
+        if (!product) continue;
 
-        if (!product) {
-          continue;
-        }
+        const cases = Number(item.cases) || 0;
+        const loose = Number(item.extraQuantity) || 0;
+        const unitsPerCase = parseInt(product.quantityPerUnit, 10) || 1;
+        const totalUnits = (cases * unitsPerCase) + loose;
 
-        let key =
-          product.image;
-
-        if (
-          key.startsWith("http")
-        ) {
-          key = key
-            .split("?")[0]
-            .split("/")
-            .pop()!;
-        }
-
-        const cases =
-          Number(item.cases) || 0;
-        const loose =
-          Number(item.extraQuantity) || 0;
-        const unitsPerCase =
-          parseInt(product.quantityPerUnit, 10) || 1;
-        const totalUnits =
-          (cases * unitsPerCase) + loose;
-
-        const pricePerCase =
-          Number(product.price) || 0;
+        const pricePerCase = Number(product.price) || 0;
         const pricePerUnit =
           product.loosePrice && Number(product.loosePrice) > 0
             ? Number(product.loosePrice)
@@ -437,45 +478,29 @@ export class OrdersService {
             ? Number((pricePerCase / unitsPerCase).toFixed(2))
             : pricePerCase;
 
-        const gstPercent = Math.max(
-          0,
-          parseFloat((product as any).gstPercent || "0") || 0,
-        );
+        const gstPercent = Math.max(0, parseFloat((product as any).gstPercent || "0") || 0);
         const caseGstAmount = (pricePerCase * gstPercent) / 100;
         const totalCaseGst = cases * caseGstAmount;
         const casesSubtotal = Math.round(cases * (pricePerCase + caseGstAmount));
-        const looseSubtotal = Math.round(loose * pricePerUnit); // Strictly 0% GST on loose
+        const looseSubtotal = Math.round(loose * pricePerUnit);
         const itemSubtotal = casesSubtotal + looseSubtotal;
 
-        totalAmount +=
-          itemSubtotal;
-
-        totalQuantity +=
-          totalUnits;
-
-        totalGstAmount +=
-          totalCaseGst;
+        totalAmount += itemSubtotal;
+        totalQuantity += totalUnits;
+        totalGstAmount += totalCaseGst;
 
         const packBreakdown = formatUnitBreakdown(cases, loose, product.unit);
+        const signedImage = imageMap.get(product.image) || product.image;
 
         productsData.push({
-          id:
-            product.id,
-
-          name:
-            product.name,
-
-          image:
-            await this.s3Service.getSignedImageUrl(
-              key,
-            ),
-
+          id: product.id,
+          name: product.name,
+          image: signedImage,
           quantity: totalUnits,
           cases,
           extraQuantity: loose,
           loose,
           unitsPerCase,
-
           price: pricePerCase,
           pricePerCase,
           pricePerUnit,
@@ -484,48 +509,14 @@ export class OrdersService {
           caseGstAmount: Number(caseGstAmount.toFixed(2)),
           totalCaseGst: Number(totalCaseGst.toFixed(2)),
           pricePerCaseWithGst: Number((pricePerCase + caseGstAmount).toFixed(2)),
-
-          subtotal:
-            itemSubtotal,
-
+          subtotal: itemSubtotal,
           packBreakdown,
-
-          unit:
-            product.unit,
-
-          quantityPerUnit:
-            product.quantityPerUnit,
+          unit: product.unit,
+          quantityPerUnit: product.quantityPerUnit,
         });
       }
 
-      // ========================================
-      // FIND DELIVERY DAY FOR THIS ORDER
-      // ========================================
-
-      let deliveryDay:
-        typeof deliverySlots.$inferSelect |
-        undefined = undefined;
-
-      if (order.slotId) {
-        deliveryDay =
-          await db.query.deliverySlots.findFirst({
-            where: and(
-              eq(
-                deliverySlots.id,
-                order.slotId,
-              ),
-              eq(
-                deliverySlots.agencyId,
-                order.agencyId,
-              ),
-              eq(
-                deliverySlots.shopId,
-                order.shopId,
-              ),
-            ),
-          });
-      }
-
+      let deliveryDay = order.slotId ? slotsMap.get(order.slotId) : undefined;
       let effectiveScheduledDate = order.scheduledDate;
       if (!effectiveScheduledDate && deliveryDay) {
         effectiveScheduledDate = calculateNextDeliveryDate(
@@ -550,118 +541,47 @@ export class OrdersService {
         }
       }
 
-      const connection = await db.query.agencyShopConnections.findFirst({
-        where: and(
-          eq(agencyShopConnections.agencyId, order.agencyId),
-          eq(agencyShopConnections.shopId, order.shopId),
-        ),
-      });
-
-      const pendingRequest = !connection
-        ? await db.query.agencyShopRequests.findFirst({
-            where: and(
-              eq(agencyShopRequests.agencyId, order.agencyId),
-              eq(agencyShopRequests.shopId, order.shopId),
-              eq(agencyShopRequests.status, "PENDING"),
-            ),
-          })
-        : null;
+      const connection = connectionsMap.get(order.shopId);
+      const pendingRequest = !connection ? requestsMap.get(order.shopId) : null;
 
       response.push({
-        id:
-          order.id,
-
-        orderNumber:
-          order.orderNumber,
-
-        shopId:
-          order.shopId,
-
-        agencyId:
-          order.agencyId,
-
-        slotId:
-          order.slotId,
-
-        status:
-          order.status,
-
+        id: order.id,
+        orderNumber: order.orderNumber,
+        shopId: order.shopId,
+        agencyId: order.agencyId,
+        slotId: order.slotId,
+        status: order.status,
         isConnected: Boolean(connection),
         hasPendingRequest: Boolean(pendingRequest),
         connectionRequestId: pendingRequest?.id || null,
-
-        createdAt:
-          order.createdAt,
-
-        remarks:
-          order.remarks,
-
-        totalAmount:
-          totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
-
-        totalGstAmount:
-          Math.round(totalGstAmount),
-
+        createdAt: order.createdAt,
+        remarks: order.remarks,
+        totalAmount: totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
+        totalGstAmount: Math.round(totalGstAmount),
         totalQuantity,
-
-        totalItems:
-          productsData.length,
-
-        rewardPoints:
-          order.rewardPoints,
-
-        deliveryPerson:
-          order.deliveryPerson,
-
-        deliveryPhone:
-          order.deliveryPhone,
-
-        trackingMessage:
-          order.trackingMessage,
-
-        scheduledDate:
-          effectiveScheduledDate,
-
-        deliveryDay:
-          deliveryDay
-            ? {
-                id:
-                  deliveryDay.id,
-
-                day:
-                  deliveryDay.day,
-
-                deliveryDate:
-                  effectiveScheduledDate || deliveryDay.deliveryDate,
-              }
-            : null,
-
-        shop:
-          shop && {
-            id:
-              shop.id,
-
-            shopName:
-              shop.shopName,
-
-            ownerName:
-              shop.ownerName,
-
-            phone:
-              shop.phone,
-
-            address:
-              shop.address,
-
-            pincode:
-              shop.pincode,
-          },
-
-        items:
-          productsData,
-
-        products:
-          productsData,
+        totalItems: productsData.length,
+        rewardPoints: order.rewardPoints,
+        deliveryPerson: order.deliveryPerson,
+        deliveryPhone: order.deliveryPhone,
+        trackingMessage: order.trackingMessage,
+        scheduledDate: effectiveScheduledDate,
+        deliveryDay: deliveryDay
+          ? {
+              id: deliveryDay.id,
+              day: deliveryDay.day,
+              deliveryDate: effectiveScheduledDate || deliveryDay.deliveryDate,
+            }
+          : null,
+        shop: shop && {
+          id: shop.id,
+          shopName: shop.shopName,
+          ownerName: shop.ownerName,
+          phone: shop.phone,
+          address: shop.address,
+          pincode: shop.pincode,
+        },
+        items: productsData,
+        products: productsData,
       });
     }
 
@@ -705,71 +625,70 @@ export class OrdersService {
         ],
       });
 
+    if (shopOrders.length === 0) {
+      return [];
+    }
+
+    const orderIds = shopOrders.map((o) => o.id);
+    const agencyIds = [...new Set(shopOrders.map((o) => o.agencyId).filter(Boolean))];
+    const slotIds = [...new Set(shopOrders.map((o) => o.slotId).filter(Boolean) as string[])];
+
+    // Stage 1: Batch fetch all related data in parallel
+    const [allAgencies, allItems, allSlots] = await Promise.all([
+      agencyIds.length > 0 ? db.query.agencies.findMany({ where: inArray(agencies.id, agencyIds) }) : [],
+      db.query.orderItems.findMany({ where: inArray(orderItems.orderId, orderIds) }),
+      slotIds.length > 0 ? db.query.deliverySlots.findMany({ where: inArray(deliverySlots.id, slotIds) }) : [],
+    ]);
+
+    // Stage 2: Batch fetch products for all items
+    const productIds = [...new Set(allItems.map((i) => i.productId).filter(Boolean))];
+    const allProducts =
+      productIds.length > 0
+        ? await db.query.products.findMany({ where: inArray(products.id, productIds) })
+        : [];
+
+    // Stage 3: Batch fetch S3 signed URLs
+    const imageMap = await this.getSignedUrlsMap(allProducts.map((p) => p.image));
+
+    // Lookup Maps
+    const agenciesMap = new Map<string, any>();
+    for (const a of allAgencies) agenciesMap.set(a.id, a);
+
+    const slotsMap = new Map<string, any>();
+    for (const sl of allSlots) slotsMap.set(sl.id, sl);
+
+    const productsMap = new Map<string, any>();
+    for (const p of allProducts) productsMap.set(p.id, p);
+
+    const itemsByOrderId = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      const list = itemsByOrderId.get(item.orderId) || [];
+      list.push(item);
+      itemsByOrderId.set(item.orderId, list);
+    }
+
+    // Assemble response in memory (O(1) lookups, 0 extra SQL queries)
     const response: any[] = [];
 
-    for (
-      const order of shopOrders
-    ) {
-      const agency =
-        await db.query.agencies.findFirst({
-          where: eq(
-            agencies.id,
-            order.agencyId,
-          ),
-        });
-
-      const items =
-        await db.query.orderItems.findMany({
-          where: eq(
-            orderItems.orderId,
-            order.id,
-          ),
-        });
+    for (const order of shopOrders) {
+      const agency = agenciesMap.get(order.agencyId);
+      const items = itemsByOrderId.get(order.id) || [];
 
       const productsData: any[] = [];
-
       let totalAmount = 0;
       let totalQuantity = 0;
       let totalGstAmount = 0;
 
-      for (
-        const item of items
-      ) {
-        const product =
-          await db.query.products.findFirst({
-            where: eq(
-              products.id,
-              item.productId,
-            ),
-          });
+      for (const item of items) {
+        const product = productsMap.get(item.productId);
+        if (!product) continue;
 
-        if (!product) {
-          continue;
-        }
+        const cases = Number(item.cases) || 0;
+        const loose = Number(item.extraQuantity) || 0;
+        const unitsPerCase = parseInt(product.quantityPerUnit, 10) || 1;
+        const totalUnits = cases * unitsPerCase + loose;
 
-        let key =
-          product.image;
-
-        if (
-          key.startsWith("http")
-        ) {
-          key = key
-            .split("?")[0]
-            .split("/")
-            .pop()!;
-        }
-
-        const cases =
-          Number(item.cases) || 0;
-        const loose =
-          Number(item.extraQuantity) || 0;
-        const unitsPerCase =
-          parseInt(product.quantityPerUnit, 10) || 1;
-        const totalUnits =
-          (cases * unitsPerCase) + loose;
-
-        const pricePerCase =
-          Number(product.price) || 0;
+        const pricePerCase = Number(product.price) || 0;
         const pricePerUnit =
           product.loosePrice && Number(product.loosePrice) > 0
             ? Number(product.loosePrice)
@@ -777,45 +696,29 @@ export class OrdersService {
             ? Number((pricePerCase / unitsPerCase).toFixed(2))
             : pricePerCase;
 
-        const gstPercent = Math.max(
-          0,
-          parseFloat((product as any).gstPercent || "0") || 0,
-        );
+        const gstPercent = Math.max(0, parseFloat((product as any).gstPercent || "0") || 0);
         const caseGstAmount = (pricePerCase * gstPercent) / 100;
         const totalCaseGst = cases * caseGstAmount;
         const casesSubtotal = Math.round(cases * (pricePerCase + caseGstAmount));
         const looseSubtotal = Math.round(loose * pricePerUnit); // Strictly 0% GST on loose
         const itemSubtotal = casesSubtotal + looseSubtotal;
 
-        totalAmount +=
-          itemSubtotal;
-
-        totalQuantity +=
-          totalUnits;
-
-        totalGstAmount +=
-          totalCaseGst;
+        totalAmount += itemSubtotal;
+        totalQuantity += totalUnits;
+        totalGstAmount += totalCaseGst;
 
         const packBreakdown = formatUnitBreakdown(cases, loose, product.unit);
+        const signedImage = imageMap.get(product.image) || product.image;
 
         productsData.push({
-          id:
-            product.id,
-
-          name:
-            product.name,
-
-          image:
-            await this.s3Service.getSignedImageUrl(
-              key,
-            ),
-
+          id: product.id,
+          name: product.name,
+          image: signedImage,
           quantity: totalUnits,
           cases,
           extraQuantity: loose,
           loose,
           unitsPerCase,
-
           price: pricePerCase,
           pricePerCase,
           pricePerUnit,
@@ -824,150 +727,70 @@ export class OrdersService {
           caseGstAmount: Number(caseGstAmount.toFixed(2)),
           totalCaseGst: Number(totalCaseGst.toFixed(2)),
           pricePerCaseWithGst: Number((pricePerCase + caseGstAmount).toFixed(2)),
-
-          subtotal:
-            itemSubtotal,
-
+          subtotal: itemSubtotal,
           packBreakdown,
-
-          unit:
-            product.unit,
-
-          quantityPerUnit:
-            product.quantityPerUnit,
+          unit: product.unit,
+          quantityPerUnit: product.quantityPerUnit,
         });
       }
 
-      // ========================================
-      // FIND DELIVERY DAY
-      // ========================================
-
-      let deliveryDay:
-  typeof deliverySlots.$inferSelect |
-  undefined = undefined;
-
-if (order.slotId) {
-  deliveryDay =
-    await db.query.deliverySlots.findFirst({
-      where: and(
-        eq(
-          deliverySlots.id,
-          order.slotId,
-        ),
-        eq(
-          deliverySlots.agencyId,
-          order.agencyId,
-        ),
-        eq(
-          deliverySlots.shopId,
-          order.shopId,
-        ),
-      ),
-    });
-}
-
-let effectiveScheduledDate = order.scheduledDate;
-if (!effectiveScheduledDate && deliveryDay) {
-  effectiveScheduledDate = calculateNextDeliveryDate(
-    deliveryDay,
-    order.createdAt ? new Date(order.createdAt) : new Date(),
-  );
-} else if (
-  effectiveScheduledDate &&
-  order.createdAt &&
-  order.status !== "DELIVERED" &&
-  order.status !== "CANCELLED"
-) {
-  const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
-  const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
-  if (schedTime < createdTime) {
-    effectiveScheduledDate = deliveryDay
-      ? calculateNextDeliveryDate(
+      let deliveryDay = order.slotId ? slotsMap.get(order.slotId) : undefined;
+      let effectiveScheduledDate = order.scheduledDate;
+      if (!effectiveScheduledDate && deliveryDay) {
+        effectiveScheduledDate = calculateNextDeliveryDate(
           deliveryDay,
-          new Date(order.createdAt),
-        )
-      : null;
-  }
-}
+          order.createdAt ? new Date(order.createdAt) : new Date(),
+        );
+      } else if (
+        effectiveScheduledDate &&
+        order.createdAt &&
+        order.status !== "DELIVERED" &&
+        order.status !== "CANCELLED"
+      ) {
+        const schedTime = new Date(effectiveScheduledDate).setHours(0, 0, 0, 0);
+        const createdTime = new Date(order.createdAt).setHours(0, 0, 0, 0);
+        if (schedTime < createdTime) {
+          effectiveScheduledDate = deliveryDay
+            ? calculateNextDeliveryDate(
+                deliveryDay,
+                new Date(order.createdAt),
+              )
+            : null;
+        }
+      }
 
       response.push({
-        id:
-          order.id,
-
-        shopId:
-          order.shopId,
-
-        agencyId:
-          order.agencyId,
-
-        orderNumber:
-          order.orderNumber,
-
-        status:
-          order.status,
-
-        createdAt:
-          order.createdAt,
-
-        remarks:
-          order.remarks,
-
-        totalAmount,
-
-        totalGstAmount:
-          Math.round(totalGstAmount),
-
+        id: order.id,
+        shopId: order.shopId,
+        agencyId: order.agencyId,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+        remarks: order.remarks,
+        totalAmount: totalAmount > 0 ? totalAmount : Number(order.totalAmount || 0),
+        totalGstAmount: Math.round(totalGstAmount),
         totalQuantity,
-
-        totalItems:
-          productsData.length,
-
-        rewardPoints:
-          order.rewardPoints,
-
-        deliveryPerson:
-          order.deliveryPerson,
-
-        deliveryPhone:
-          order.deliveryPhone,
-
-        trackingMessage:
-          order.trackingMessage,
-
-        scheduledDate:
-          effectiveScheduledDate,
-
-        deliveryDay:
-          deliveryDay
-            ? {
-                id:
-                  deliveryDay.id,
-
-                day:
-                  deliveryDay.day,
-
-                deliveryDate:
-                  effectiveScheduledDate || deliveryDay.deliveryDate,
-              }
-            : null,
-
-        agency:
-          agency && {
-            id:
-              agency.id,
-
-            agencyName:
-              agency.agencyName,
-
-            ownerName:
-              agency.ownerName,
-
-            phone:
-              agency.phone,
-          },
-
-        items:
-          productsData,
+        totalItems: productsData.length,
+        rewardPoints: order.rewardPoints,
+        deliveryPerson: order.deliveryPerson,
+        deliveryPhone: order.deliveryPhone,
+        trackingMessage: order.trackingMessage,
+        scheduledDate: effectiveScheduledDate,
+        deliveryDay: deliveryDay
+          ? {
+              id: deliveryDay.id,
+              day: deliveryDay.day,
+              deliveryDate: effectiveScheduledDate || deliveryDay.deliveryDate,
+            }
+          : null,
+        agency: agency && {
+          id: agency.id,
+          agencyName: agency.agencyName,
+          ownerName: agency.ownerName,
+          phone: agency.phone,
+        },
+        items: productsData,
+        products: productsData,
       });
     }
 
