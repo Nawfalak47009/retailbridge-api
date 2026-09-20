@@ -2,7 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 
 import {
@@ -100,7 +100,7 @@ export class CartService {
       });
 
     if (rejectedRequest) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "Your connection request was declined by this agency. You cannot order products from this agency.",
       );
     }
@@ -748,7 +748,7 @@ export class CartService {
         });
 
       if (rejectedRequest) {
-        throw new UnauthorizedException(
+        throw new ForbiddenException(
           `Your connection request was declined by ${agency.agencyName}. You cannot place orders with this agency.`,
         );
       }

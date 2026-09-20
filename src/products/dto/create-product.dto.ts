@@ -7,6 +7,10 @@ export class CreateProductDto {
   @IsString()
   name!: string;
 
+  @IsOptional()
+  @IsString()
+  nameTamil?: string;
+
   @IsString()
   category!: string;
 

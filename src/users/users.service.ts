@@ -63,6 +63,11 @@ export class UsersService {
       success: true,
       status:
         user.status,
+
+      // The approval screen uses this to send the user to the agency
+      // or the grocery login. Without it everyone landed on grocery.
+      role:
+        user.role,
     };
   }
 }

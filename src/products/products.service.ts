@@ -1,7 +1,7 @@
 import {
   Injectable,
   NotFoundException,
-  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 
 import { eq, and } from "drizzle-orm";
@@ -54,6 +54,7 @@ export class ProductsService {
         .values({
           agencyId: agency.id,
           name: dto.name,
+          nameTamil: dto.nameTamil ?? null,
           category: dto.category,
           image: dto.image,
           unit: dto.unit,
@@ -398,7 +399,7 @@ export class ProductsService {
       product.agencyId !==
       agency.id
     ) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You cannot update this product.",
       );
     }
@@ -503,7 +504,7 @@ export class ProductsService {
       product.agencyId !==
       agency.id
     ) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You cannot delete this product.",
       );
     }

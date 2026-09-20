@@ -1,7 +1,7 @@
 import {
   Injectable,
   NotFoundException,
-  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 
 import {
@@ -135,7 +135,7 @@ export class OrdersService {
       });
 
     if (rejectedRequest) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         `Your connection request was declined by ${agency.agencyName}. You cannot place orders with this agency.`,
       );
     }
@@ -857,7 +857,7 @@ export class OrdersService {
         agency.id !==
           order.agencyId
       ) {
-        throw new UnauthorizedException(
+        throw new ForbiddenException(
           "Unauthorized.",
         );
       }
@@ -879,7 +879,7 @@ export class OrdersService {
         shop.id !==
           order.shopId
       ) {
-        throw new UnauthorizedException(
+        throw new ForbiddenException(
           "Unauthorized.",
         );
       }
@@ -1280,7 +1280,7 @@ if (!effectiveScheduledDate && deliveryDay) {
       order.agencyId !==
       agency.id
     ) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You cannot update this order.",
       );
     }

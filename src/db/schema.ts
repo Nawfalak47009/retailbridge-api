@@ -163,6 +163,12 @@ export const products = pgTable(
       length: 255,
     }).notNull(),
 
+    // Tamil name. Auto-filled when the agency types the English name,
+    // but editable — machine translation mangles brand names.
+    nameTamil: varchar({
+      length: 255,
+    }),
+
     category: varchar({
       length: 100,
     }).notNull(),
