@@ -117,6 +117,24 @@ export class DeliverySlotsController {
   }
 
   // ==========================================
+  // AGENCY → SHOPS THAT HAVE NOT ORDERED YET
+  // ==========================================
+
+  @Get("agency/:agencyId/pending-shops")
+  findShopsYetToOrder(
+    @Param("agencyId")
+    agencyId: string,
+
+    @Req()
+    req: any,
+  ) {
+    return this.deliverySlotsService.getAgencyShopsYetToOrder(
+      agencyId,
+      req.user,
+    );
+  }
+
+  // ==========================================
   // WHATSAPP SLOT REMINDER IN TAMIL
   // ==========================================
 

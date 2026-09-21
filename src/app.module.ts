@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -17,7 +18,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 
 
 @Module({
-  imports: [AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, ProfilesModule, CartModule, AgencyConnectionsModule, DeliverySlotsModule, NotificationsModule],
+  imports: [ScheduleModule.forRoot(), AuthModule, UsersModule, AgenciesModule, ShopsModule, DocumentsModule, AdminModule, ProductsModule, OrdersModule, ProfilesModule, CartModule, AgencyConnectionsModule, DeliverySlotsModule, NotificationsModule],
   controllers: [AppController],
   providers: [AppService],
 })

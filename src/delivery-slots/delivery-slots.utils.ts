@@ -113,3 +113,58 @@ export function calculateNextDeliveryDate(
   // 4. Default fallback: Tomorrow
   return new Date(Date.UTC(ist.year, ist.month - 1, ist.day + 1, 12, 0, 0));
 }
+
+/**
+ * Order states that mean the shop has already ordered for an upcoming
+ * delivery. Anything delivered, cancelled or rejected does not count.
+ */
+export const LIVE_ORDER_STATUSES = [
+  "DELIVERY_SCHEDULE_PENDING",
+  "PENDING",
+  "ACCEPTED",
+  "SCHEDULED",
+  "OUT_FOR_DELIVERY",
+  "PROCESSING",
+  "PLACED",
+];
+
+/**
+ * Has this shop already ordered from this agency for the given
+ * delivery date?
+ *
+ * Extracted so the shop reminder, the agency "yet to order" list and
+ * the daily push all answer this the same way. They disagreed before,
+ * which meant a shop could be chased for an order it had placed.
+ */
+export function hasOrderedForSlot(
+  shopOrders: any[],
+  slot: { id: string; agencyId: string },
+  slotDate: Date,
+): boolean {
+  return (shopOrders || []).some((ord) => {
+    if (ord.agencyId !== slot.agencyId) return false;
+    if (ord.status === "CANCELLED") return false;
+    if (ord.status === "REJECTED") return false;
+
+    // Any live order for this agency counts.
+    if (LIVE_ORDER_STATUSES.includes(ord.status)) return true;
+
+    // Pinned to this exact delivery day.
+    if (ord.slotId && ord.slotId === slot.id) return true;
+
+    // Or scheduled on the same calendar day.
+    if (ord.scheduledDate) {
+      const scheduled = new Date(ord.scheduledDate);
+
+      if (
+        scheduled.getFullYear() === slotDate.getFullYear() &&
+        scheduled.getMonth() === slotDate.getMonth() &&
+        scheduled.getDate() === slotDate.getDate()
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}

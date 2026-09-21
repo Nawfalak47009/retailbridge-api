@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
 } from "@nestjs/common";
+
+import { Cron } from "@nestjs/schedule";
 
 import {
   eq,
@@ -24,11 +27,19 @@ import {
 import {
   CreateDeliverySlotDto,
 } from "./dto/create-delivery-slot.dto";
-import { calculateNextDeliveryDate } from "./delivery-slots.utils";
+import {
+  calculateNextDeliveryDate,
+  getIndiaDateParts,
+  hasOrderedForSlot,
+} from "./delivery-slots.utils";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 @Injectable()
 export class DeliverySlotsService {
+  private readonly logger = new Logger(
+    DeliverySlotsService.name,
+  );
+
   constructor(
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
@@ -631,6 +642,299 @@ export class DeliverySlotsService {
   // ==========================================
   // SHOP → ACTIVE SLOT ORDERING REMINDERS
   // ==========================================
+
+  // ==========================================
+  // AGENCY → SHOPS THAT HAVE NOT ORDERED YET
+  //
+  // Mirror of getShopSlotReminders, seen from the other side: which of
+  // my connected shops have an upcoming delivery day and still have no
+  // order against it. Includes the phone number so the agency can
+  // chase them on WhatsApp or by call.
+  // ==========================================
+
+  async getAgencyShopsYetToOrder(
+    agencyId: string,
+    user?: any,
+  ) {
+    if (user && user.role !== "AGENCY") {
+      throw new ForbiddenException(
+        "Only agencies can access this list.",
+      );
+    }
+
+    const agency =
+      await db.query.agencies.findFirst({
+        where: eq(agencies.id, agencyId),
+      });
+
+    if (!agency) {
+      throw new BadRequestException(
+        "Agency not found.",
+      );
+    }
+
+    if (user && agency.userId !== user.id) {
+      throw new ForbiddenException(
+        "You can only access your own shops.",
+      );
+    }
+
+    const activeSlots =
+      await db
+        .select()
+        .from(deliverySlots)
+        .where(
+          and(
+            eq(
+              deliverySlots.agencyId,
+              agencyId,
+            ),
+            eq(
+              deliverySlots.isActive,
+              "true",
+            ),
+          ),
+        );
+
+    if (activeSlots.length === 0) {
+      return [];
+    }
+
+    const agencyOrders =
+      await db.query.orders.findMany({
+        where: eq(
+          orders.agencyId,
+          agencyId,
+        ),
+      });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const pending: any[] = [];
+
+    for (const slot of activeSlots) {
+      const slotDate = calculateNextDeliveryDate(
+        slot,
+        today,
+      );
+
+      const shopOrders = agencyOrders.filter(
+        (ord) => ord.shopId === slot.shopId,
+      );
+
+      if (
+        hasOrderedForSlot(
+          shopOrders,
+          slot,
+          slotDate,
+        )
+      ) {
+        continue;
+      }
+
+      const shop =
+        await db.query.shops.findFirst({
+          where: eq(shops.id, slot.shopId),
+        });
+
+      // Connection or shop gone — nothing to chase.
+      if (!shop) {
+        continue;
+      }
+
+      const slotEnd = new Date(slotDate);
+      slotEnd.setHours(23, 59, 59, 999);
+
+      const hoursLeft = Math.max(
+        0,
+        Math.round(
+          (slotEnd.getTime() - Date.now()) /
+            (1000 * 60 * 60),
+        ),
+      );
+
+      pending.push({
+        slotId: slot.id,
+        shopId: shop.id,
+        shopName: shop.shopName,
+        ownerName: shop.ownerName,
+        phone: shop.phone,
+        address: shop.address,
+        day: slot.day,
+        deliveryDate: slotDate,
+        formattedDate: slotDate.toLocaleDateString(
+          "en-IN",
+          {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          },
+        ),
+        hoursLeft,
+        isUrgent: hoursLeft <= 36,
+        message: `${shop.shopName} has not ordered for ${slot.day}'s delivery yet.`,
+      });
+    }
+
+    // Most urgent first.
+    pending.sort(
+      (a, b) => a.hoursLeft - b.hoursLeft,
+    );
+
+    return pending;
+  }
+
+  // ==========================================
+  // DAILY PUSH — DELIVERY TOMORROW, NO ORDER
+  //
+  // Runs on the server so it reaches both sides with the app closed.
+  // 6:00 PM India time: late enough that the day's orders are mostly
+  // in, early enough to still act before tomorrow's delivery.
+  // ==========================================
+
+  @Cron("0 18 * * *", {
+    timeZone: "Asia/Kolkata",
+  })
+  async dispatchDailyReminders() {
+    try {
+      const now = new Date();
+      const todayIst = getIndiaDateParts(now);
+
+      // Tomorrow's date in India, as a comparable key.
+      const tomorrow = new Date(
+        Date.UTC(
+          todayIst.year,
+          todayIst.month - 1,
+          todayIst.day + 1,
+          12,
+          0,
+          0,
+        ),
+      );
+
+      const tomorrowIst =
+        getIndiaDateParts(tomorrow);
+
+      const tomorrowKey = `${tomorrowIst.year}-${tomorrowIst.month}-${tomorrowIst.day}`;
+
+      const activeSlots =
+        await db
+          .select()
+          .from(deliverySlots)
+          .where(
+            eq(
+              deliverySlots.isActive,
+              "true",
+            ),
+          );
+
+      let sent = 0;
+
+      for (const slot of activeSlots) {
+        const slotDate =
+          calculateNextDeliveryDate(slot, now);
+
+        const slotIst =
+          getIndiaDateParts(slotDate);
+
+        const slotKey = `${slotIst.year}-${slotIst.month}-${slotIst.day}`;
+
+        // Only the day before — nobody gets pinged twice.
+        if (slotKey !== tomorrowKey) {
+          continue;
+        }
+
+        const shopOrders =
+          await db.query.orders.findMany({
+            where: and(
+              eq(
+                orders.shopId,
+                slot.shopId,
+              ),
+              eq(
+                orders.agencyId,
+                slot.agencyId,
+              ),
+            ),
+          });
+
+        if (
+          hasOrderedForSlot(
+            shopOrders,
+            slot,
+            slotDate,
+          )
+        ) {
+          continue;
+        }
+
+        const shop =
+          await db.query.shops.findFirst({
+            where: eq(shops.id, slot.shopId),
+          });
+
+        const agency =
+          await db.query.agencies.findFirst({
+            where: eq(
+              agencies.id,
+              slot.agencyId,
+            ),
+          });
+
+        if (!shop || !agency) {
+          continue;
+        }
+
+        // Shop: please order.
+        await this.pushNotificationsService.sendToUser(
+          shop.userId,
+          {
+            title: "🛒 Delivery tomorrow",
+            body: `${agency.agencyName} delivers tomorrow (${slot.day}). Please place your order today.`,
+            screenToOpen: "/(grocery)",
+            channelId: "orders",
+            data: {
+              type: "order",
+              slotId: slot.id,
+              agencyId: agency.id,
+            },
+          },
+        );
+
+        // Agency: this shop has not ordered.
+        await this.pushNotificationsService.sendToUser(
+          agency.userId,
+          {
+            title: "⚠️ Shop has not ordered",
+            body: `${shop.shopName} has not ordered for tomorrow's delivery (${slot.day}).`,
+            screenToOpen: "/(agency)",
+            channelId: "orders",
+            data: {
+              type: "order",
+              slotId: slot.id,
+              shopId: shop.id,
+            },
+          },
+        );
+
+        sent += 1;
+      }
+
+      this.logger.log(
+        `Delivery reminders dispatched for ${sent} delivery day(s).`,
+      );
+
+      return { success: true, sent };
+    } catch (err) {
+      // A failed reminder run must never take the server down.
+      this.logger.error(
+        `Daily reminder dispatch failed: ${String(err)}`,
+      );
+
+      return { success: false, sent: 0 };
+    }
+  }
 
   async getShopSlotReminders(
     shopId: string,
